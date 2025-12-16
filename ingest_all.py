@@ -1,0 +1,30 @@
+from pathlib import Path
+import sys
+
+# 1) Ensure backend root on sys.path
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(BASE_DIR))
+
+# 2) Import the REAL logger helpers from core (__init__ re-exports them)
+from core import initlogger, getlogger
+
+# Initialize global logger BEFORE importing services
+initlogger()
+logger = getlogger(__name__)
+
+# 3) Now safely import RAGPipeline (which imports services/document_parser)
+from services.rag_pipeline import RAGPipeline
+
+
+def main():
+    docs_root = Path(r"D:\jericho\data\documents")
+    paths = [str(p) for p in docs_root.rglob("*") if p.is_file()]
+    logger.info(f"Found {len(paths)} files to ingest under {docs_root}")
+
+    rag = RAGPipeline()
+    stats = rag.ingest_documents(paths)
+    logger.info(f"INGEST STATS: {stats}")
+
+
+if __name__ == "__main__":
+    main()

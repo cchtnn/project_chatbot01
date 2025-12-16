@@ -1,0 +1,260 @@
+"""
+Jericho API routes
+
+- RAG endpoints (hybrid retrieval + generation)
+- UI-compatible endpoints expected by chat.html / login.html / admin.html
+"""
+
+from datetime import datetime
+from pathlib import Path
+from typing import List, Dict
+
+from fastapi import (
+    APIRouter,
+    Form,
+    UploadFile,
+    File,
+    HTTPException,
+)
+from pydantic import BaseModel
+
+from core import get_logger
+from services.rag_pipeline import RAGPipeline
+from core.retrieval import get_hybrid_retriever
+
+logger = get_logger(__name__)
+router = APIRouter()
+
+# ---------- RAG PIPELINE INITIALIZATION ----------
+
+rag_pipeline = RAGPipeline()
+hybrid_retriever = get_hybrid_retriever()
+
+# ---------- SIMPLE RAG API (TESTED) ----------
+
+class SimpleQueryRequest(BaseModel):
+    query: str
+    session_id: int = 1
+
+@router.get("/query_simple")
+async def query_simple(query: str, session_id: int = 1):
+    """
+    Simple GET query endpoint used for earlier testing.
+    Kept for debugging; UI uses POST /query.
+    """
+    try:
+        logger.info(f"[query_simple] q='{query}' session={session_id}")
+
+        # Use unified RAG pipeline (multi-modal) instead of manual prompt
+        result = rag_pipeline.query(question=query, top_k=5)
+        answer = result.get("answer", "")
+        sources = result.get("sources", [])
+
+        return {
+            "answer": answer,
+            "sources": [
+                {
+                    "content": s.get("content", "")[:200] + "...",
+                    "filename": s.get("filename", "unknown"),
+                }
+                for s in sources
+            ],
+            "session_id": session_id,
+        }
+    except Exception as e:
+        logger.error(f"[query_simple] error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ---------- IN-MEMORY SESSION STORE (UI STUB) ----------
+
+# For now, keep sessions in memory.
+# Later this can be replaced with a DB-backed implementation similar to GitHub main.py.
+_sessions: Dict[int, Dict] = {}
+_next_session_id = 1
+
+def _get_or_create_session(session_id: int) -> Dict:
+    global _next_session_id
+    if session_id in _sessions:
+        return _sessions[session_id]
+    session = {
+        "session_id": session_id,
+        "session_name": "New Chat",
+        "created_at": datetime.utcnow().isoformat(),
+        "messages": [],
+    }
+    _sessions[session_id] = session
+    _next_session_id = max(_next_session_id, session_id + 1)
+    return session
+
+# ---------- UI-COMPATIBLE ENDPOINTS ----------
+
+@router.post("/new_session")
+async def new_session():
+    """
+    Create a new chat session.
+
+    Matches JS usage in chat.html:
+    - POST /new_session
+    - Returns: {"session_id": int}
+    """
+    global _next_session_id
+    session_id = _next_session_id
+    _next_session_id += 1
+
+    _sessions[session_id] = {
+        "session_id": session_id,
+        "session_name": "New Chat",
+        "created_at": datetime.utcnow().isoformat(),
+        "messages": [],
+    }
+    logger.info(f"[new_session] created session_id={session_id}")
+    return {"session_id": session_id}
+
+@router.get("/user_sessions")
+async def user_sessions():
+    """
+    Return list of sessions for current user.
+
+    GitHub main.py scopes by username; for now we return all sessions:
+    - GET /user_sessions
+    - Returns: {"sessions": [{session_id, session_name}, ...]}
+    """
+    sessions = [
+        {
+            "session_id": s["session_id"],
+            "session_name": s.get("session_name", "New Chat"),
+        }
+        for s in _sessions.values()
+    ]
+    return {"sessions": sessions}
+
+@router.get("/history")
+async def history(session_id: int):
+    """
+    Return Q&A history for a session.
+
+    JS calls: GET /history?session_id=...
+    Response: {"history": [{"question": "...", "answer": "..."}, ...]}
+    """
+    session = _sessions.get(session_id)
+    if not session:
+        return {"history": []}
+
+    history = [
+        {"question": m["question"], "answer": m["answer"]}
+        for m in session["messages"]
+    ]
+    return {"history": history}
+
+@router.post("/rename_session")
+async def rename_session(session_id: int = Form(...), new_name: str = Form(...)):
+    """
+    Rename a session (used by rename modal in chat.html).
+    """
+    session = _sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session["session_name"] = new_name.strip() or "New Chat"
+    logger.info(f"[rename_session] session_id={session_id} new_name='{session['session_name']}'")
+    return {"success": True}
+
+@router.post("/delete_session")
+async def delete_session(session_id: int = Form(...)):
+    """
+    Delete a session (used by delete option in chat sidebar).
+    """
+    if session_id in _sessions:
+        del _sessions[session_id]
+        logger.info(f"[delete_session] deleted session_id={session_id}")
+    return {"success": True}
+
+# ---------- CORE RAG /query USED BY UI ----------
+
+@router.post("/query")
+async def query_endpoint(
+    query: str = Form(...),
+    session_id: int = Form(...),
+    private: bool = Form(False),
+):
+    """
+    Main chat endpoint used by chat.html JS.
+
+    Frontend sends FormData:
+      - query
+      - session_id
+      - private (checkbox)
+
+    Response is expected to contain:
+      - answer
+      - session_id
+      - session_name_updated (bool)
+    """
+    try:
+        logger.info(f"[query] q='{query}' session={session_id} private={private}")
+
+        # Use unified RAG pipeline (handles routing + table/text)
+        result = rag_pipeline.query(question=query, top_k=5)
+        answer = result.get("answer", "")
+
+        # Update session history
+        session = _get_or_create_session(session_id)
+        session["messages"].append({"question": query, "answer": answer})
+
+        # For now we don't rename sessions automatically
+        session_name_updated = False
+
+        return {
+            "answer": answer,
+            "session_id": session_id,
+            "session_name_updated": session_name_updated,
+        }
+    except Exception as e:
+        logger.error(f"[query] error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error while answering query")
+
+# ---------- FILE UPLOAD (USED BY UI) ----------
+
+@router.post("/upload")
+async def upload_endpoint(
+    files: List[UploadFile] = File(...),
+    session_id: int = Form(...),
+    private: bool = Form(False),
+):
+    """
+    Upload endpoint used by chat.html.
+
+    Frontend sends FormData:
+      - files (one or more)
+      - private (boolean)
+      - session_id
+
+    We save files to data/documents/ and ingest into RAG pipeline.
+    """
+    try:
+        logger.info(
+            f"[upload] session_id={session_id} private={private} files={[f.filename for f in files]}"
+        )
+
+        base_dir = Path("data/documents")
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        paths: List[str] = []
+        for file in files:
+            dest = base_dir / file.filename
+            with dest.open("wb") as f:
+                f.write(await file.read())
+            paths.append(str(dest))
+
+        stats = rag_pipeline.ingest_documents(paths)
+
+        message = f"Processed {stats.get('processed', 0)} file(s), failed {stats.get('failed', 0)}."
+        return {
+            "success": True,
+            "message": message,
+            "processed_files": [Path(p).name for p in paths],
+            "errors": [] if stats.get("failed", 0) == 0 else ["Some files failed to ingest."],
+        }
+    except Exception as e:
+        logger.error(f"[upload] error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Upload/ingest failed")
