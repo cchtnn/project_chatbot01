@@ -1,15 +1,14 @@
-from core import init_logger
+from core import init_logger, get_logger
 init_logger()
-from services.rag_pipeline import RAGPipeline
+from services.tools import bor_planner_tool
 
-rag = RAGPipeline()
+questions = [
+    "When is the Board meetings due?",
+    "when is ACCT NLS '26 event scheduled",
+]
 
-for q in [
-    "What is the check date for Pay period 3?",
-    "How many payroll periods are in calendar year 2026?"
-]:
-    result = rag.query(q, top_k=10)
+for q in questions:
+    res = bor_planner_tool.answer(q, {})
     print("Q:", q)
-    print("  Agent:", result.get("agent"))
-    print("  Answer:", result.get("answer", "")[:300])
-    print()
+    print("A:", res.explanation)
+    print("----")

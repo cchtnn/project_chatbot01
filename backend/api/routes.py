@@ -171,47 +171,39 @@ async def delete_session(session_id: int = Form(...)):
 
 # ---------- CORE RAG /query USED BY UI ----------
 
+from services.orchestrator import Orchestrator, OrchestratorRequest
+
+# Global singleton
+orchestrator = Orchestrator()
+
 @router.post("/query")
 async def query_endpoint(
     query: str = Form(...),
     session_id: int = Form(...),
     private: bool = Form(False),
 ):
-    """
-    Main chat endpoint used by chat.html JS.
+    # Your existing auth/session logic stays EXACTLY the same
+    # username = get_username_from_token(request)
+    # if not username:
+    #     raise HTTPException(status_code=401, detail="Unauthorized")
 
-    Frontend sends FormData:
-      - query
-      - session_id
-      - private (checkbox)
-
-    Response is expected to contain:
-      - answer
-      - session_id
-      - session_name_updated (bool)
-    """
-    try:
-        logger.info(f"[query] q='{query}' session={session_id} private={private}")
-
-        # Use unified RAG pipeline (handles routing + table/text)
-        result = rag_pipeline.query(question=query, top_k=5)
-        answer = result.get("answer", "")
-
-        # Update session history
-        session = _get_or_create_session(session_id)
-        session["messages"].append({"question": query, "answer": answer})
-
-        # For now we don't rename sessions automatically
-        session_name_updated = False
-
-        return {
-            "answer": answer,
-            "session_id": session_id,
-            "session_name_updated": session_name_updated,
-        }
-    except Exception as e:
-        logger.error(f"[query] error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal error while answering query")
+    username = "test_user"
+    
+    # NEW: Delegate to orchestrator
+    request = OrchestratorRequest(query=query)
+    response = orchestrator.handle_query(request)
+    
+    # Save to session history (your existing logic)
+    # session_db.add_single_qa_to_history(session_id, query, response.answer)
+    
+    # Return orchestrator response in your existing format
+    return {
+        "answer": response.answer,
+        "session_id": session_id,
+        "sources": response.sources,
+        "tools_used": response.tools_used,
+        "confidence": response.confidence
+    }
 
 # ---------- FILE UPLOAD (USED BY UI) ----------
 

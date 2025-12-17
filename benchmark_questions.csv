@@ -1,0 +1,16 @@
+id,domain,question
+T01,STUDENT_TRANSCRIPT,What is the student's GPA?
+T02,STUDENT_TRANSCRIPT,Give me the GPA details of Trista Barrett.
+T03,STUDENT_TRANSCRIPT,Tell me the courses which Joshua Don Gaitan has enrolled?
+P01,PAYROLL_CALENDAR,When is the check date for payroll period between 01/03/2026 to 01/16/2026?
+P02,PAYROLL_CALENDAR,What is the payroll period where check date is 2/6/2026?
+P03,PAYROLL_CALENDAR,How many payroll periods do we have in 2026?
+B01,BOR_MEETING,When is the next Board of Regents meeting?
+B02,BOR_MEETING,Give me the BOR meeting schedule for this year.
+B03,BOR_MEETING,When is the Finance/Audit/Investment Committee meeting?
+L01,POLICY,What is the sick leave policy for full-time staff?
+L02,POLICY,What are the health benefit plan options available to employees?
+L03,POLICY,What is the student code of conduct at Diné College?
+L04,POLICY,What is the policy on travel and purchase approvals?
+L05,POLICY,What are the housing rules in the Residence Life Handbook?
+L06,POLICY,What is the mission and vision of Diné College?

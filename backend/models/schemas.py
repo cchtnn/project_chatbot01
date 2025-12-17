@@ -117,3 +117,37 @@ class HealthResponse(BaseModel):
     uptime: float  # seconds
     total_documents: int = 0
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+# models/schemas.py - ADD THESE
+
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field
+from enum import Enum
+
+class OrchestratorResponse(BaseModel):
+    """Final orchestrator output."""
+    answer: str                             # Rendered Markdown (text/tables/sections)
+    tools_used: List[str]                   # ["TranscriptTool", "GenericRagTool"]
+    confidence: float
+    sources: List[Dict[str, Any]]           # Your existing source format
+    format_type: str                        # "text", "table", "sections"
+
+from typing import Dict, Any, List
+from pydantic import BaseModel, Field
+
+from typing import Dict, Any, List
+from pydantic import BaseModel, Field
+
+class ToolResult(BaseModel):
+    """Generic tool response for orchestrator tools."""
+    data: Dict[str, Any]
+    explanation: str
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    # Pydantic v2: use pattern instead of regex
+    format_hint: str = Field(..., pattern="^(text|table|sections|list)$")
+    citations: List[str] = Field(default_factory=list)
+    navajo_segments: List[str] = Field(default_factory=list)
+
+
+

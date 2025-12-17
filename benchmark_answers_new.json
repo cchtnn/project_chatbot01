@@ -1,0 +1,167 @@
+[
+  {
+    "id": "T01",
+    "domain": "STUDENT_TRANSCRIPT",
+    "question": "What is the student's GPA?",
+    "answer_text": "I don't have that information.",
+    "raw_response": {
+      "answer": "I don't have that information.",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "T02",
+    "domain": "STUDENT_TRANSCRIPT",
+    "question": "Give me the GPA details of Trista Barrett.",
+    "answer_text": "From the provided context, I found the following GPA details for Trista Barrett:\n\n- Career Totals GPA: 3.30\n- Term Totals GPA: 3.30 (from Barrett, Trista.pdf)\n- Term Totals GPA: 0.00 (from transcripts_student.json, for Spring 2024-2025)\n- GPA: 3.30 (from transcripts_student.json, Career Totals)\n- GPA: 3.30 (from Barrett, Trista.pdf, Career Totals)\n- GPA: 3.71 (from sample.csv, Division Career Totals, but this is not explicitly stated as Trista Barrett's GPA in the provided context, so I will not include it in the answer)\n\nNote that the GPA details from sample.csv are not explicitly stated as Trista Barrett's GPA in the provided context, so I will not include it in the answer.",
+    "raw_response": {
+      "answer": "From the provided context, I found the following GPA details for Trista Barrett:\n\n- Career Totals GPA: 3.30\n- Term Totals GPA: 3.30 (from Barrett, Trista.pdf)\n- Term Totals GPA: 0.00 (from transcripts_student.json, for Spring 2024-2025)\n- GPA: 3.30 (from transcripts_student.json, Career Totals)\n- GPA: 3.30 (from Barrett, Trista.pdf, Career Totals)\n- GPA: 3.71 (from sample.csv, Division Career Totals, but this is not explicitly stated as Trista Barrett's GPA in the provided context, so I will not include it in the answer)\n\nNote that the GPA details from sample.csv are not explicitly stated as Trista Barrett's GPA in the provided context, so I will not include it in the answer.",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "T03",
+    "domain": "STUDENT_TRANSCRIPT",
+    "question": "Tell me the courses which Joshua Don Gaitan has enrolled?",
+    "answer_text": "I don't have that information.",
+    "raw_response": {
+      "answer": "I don't have that information.",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "P01",
+    "domain": "PAYROLL_CALENDAR",
+    "question": "When is the check date for payroll period between 01/03/2026 to 01/16/2026?",
+    "answer_text": "According to the 2026Payroll_Calendar_payroll.csv, the check date for payroll period between 01/03/2026 to 01/16/2026 is \"1/23/2026\".",
+    "raw_response": {
+      "answer": "According to the 2026Payroll_Calendar_payroll.csv, the check date for payroll period between 01/03/2026 to 01/16/2026 is \"1/23/2026\".",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "P02",
+    "domain": "PAYROLL_CALENDAR",
+    "question": "What is the payroll period where check date is 2/6/2026?",
+    "answer_text": "To find the payroll period where the check date is 2/6/2026, I will look at the \"2026Payroll_Calendar_payroll.csv\" source.\n\n|   payroll_no | start_date   | end_date   | check_date   | optional_withholdings_changes_by   | \n|-------------:|:-------------|:-----------|:-------------|:-----------------------------------|\n|            2 | 1/17/2026    | 1/30/2026  | 2/6/2026     | 1/30/2026                          |\n\nThe payroll period where the check date is 2/6/2026 is payroll_no 2, with start_date 1/17/2026 and end_date 1/30/2026.",
+    "raw_response": {
+      "answer": "To find the payroll period where the check date is 2/6/2026, I will look at the \"2026Payroll_Calendar_payroll.csv\" source.\n\n|   payroll_no | start_date   | end_date   | check_date   | optional_withholdings_changes_by   | \n|-------------:|:-------------|:-----------|:-------------|:-----------------------------------|\n|            2 | 1/17/2026    | 1/30/2026  | 2/6/2026     | 1/30/2026                          |\n\nThe payroll period where the check date is 2/6/2026 is payroll_no 2, with start_date 1/17/2026 and end_date 1/30/2026.",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "P03",
+    "domain": "PAYROLL_CALENDAR",
+    "question": "How many payroll periods do we have in 2026?",
+    "answer_text": "LLM unavailable",
+    "raw_response": {
+      "answer": "LLM unavailable",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "B01",
+    "domain": "BOR_MEETING",
+    "question": "When is the next Board of Regents meeting?",
+    "answer_text": "LLM unavailable",
+    "raw_response": {
+      "answer": "LLM unavailable",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "B02",
+    "domain": "BOR_MEETING",
+    "question": "Give me the BOR meeting schedule for this year.",
+    "answer_text": "The BOR meeting schedule for this year is as follows:\n\n- November: 14, 2025\n- January: 09, 2026\n- March: 13, 2026\n- May: 08, 2026\n- July: 10, 2026\n- September: 11, 2026",
+    "raw_response": {
+      "answer": "The BOR meeting schedule for this year is as follows:\n\n- November: 14, 2025\n- January: 09, 2026\n- March: 13, 2026\n- May: 08, 2026\n- July: 10, 2026\n- September: 11, 2026",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "B03",
+    "domain": "BOR_MEETING",
+    "question": "When is the Finance/Audit/Investment Committee meeting?",
+    "answer_text": "LLM unavailable",
+    "raw_response": {
+      "answer": "LLM unavailable",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "L01",
+    "domain": "POLICY",
+    "question": "What is the sick leave policy for full-time staff?",
+    "answer_text": "LLM unavailable",
+    "raw_response": {
+      "answer": "LLM unavailable",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "L02",
+    "domain": "POLICY",
+    "question": "What are the health benefit plan options available to employees?",
+    "answer_text": "According to the context, the health benefit plan options available to employees are:\n\n1. Self-funded Plans\n2. Fully Insured Plan\n\nThese options are listed in the table under the \"BENE\" column in the \"EBP_-_Prsnt_Chptr_Orient_2013 Employee Health Beneift Program.pdf\" source.",
+    "raw_response": {
+      "answer": "According to the context, the health benefit plan options available to employees are:\n\n1. Self-funded Plans\n2. Fully Insured Plan\n\nThese options are listed in the table under the \"BENE\" column in the \"EBP_-_Prsnt_Chptr_Orient_2013 Employee Health Beneift Program.pdf\" source.",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "L03",
+    "domain": "POLICY",
+    "question": "What is the student code of conduct at Diné College?",
+    "answer_text": "LLM unavailable",
+    "raw_response": {
+      "answer": "LLM unavailable",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "L04",
+    "domain": "POLICY",
+    "question": "What is the policy on travel and purchase approvals?",
+    "answer_text": "According to the provided context, the policy on travel and purchase approvals is as follows:\n\n- All travel shall be authorized in advance by the approving official (Section A Authorizations and Responsibilities, REQUIREMENT FOR TRAVEL AUTHORIZATION).\n- The authorization should be specific with respect to the purpose of travel, location, and dates (Section A Authorizations and Responsibilities, REQUIREMENT FOR TRAVEL AUTHORIZATION).\n- Authorization of an uncustomary transportation method (e.g. charter airplane) will require the President's or Vice President's approval and a showing of cost feasibility (Section A Authorizations and Responsibilities, REQUIREMENT FOR TRAVEL AUTHORIZATION).\n- Payment will be made in accordance with ACCOUNTS PAYABLE SCHEDULE OF DISBURSEMENTS for amounts over $100.00, and reimbursements less than $100.00 will be processed in accordance with the Payroll schedule (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).\n- All travelers must attach an agenda at the time of submittal of Travel Authorization of the meeting, training, and conference, etc. that they are attending (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).\n- The President shall sign Travel Authorizations for the Board of Regents (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).\n- A Travel Authorization is required for all official travel (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).\n- Blanket Travel Authorizations must be properly approved by an approving official (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).",
+    "raw_response": {
+      "answer": "According to the provided context, the policy on travel and purchase approvals is as follows:\n\n- All travel shall be authorized in advance by the approving official (Section A Authorizations and Responsibilities, REQUIREMENT FOR TRAVEL AUTHORIZATION).\n- The authorization should be specific with respect to the purpose of travel, location, and dates (Section A Authorizations and Responsibilities, REQUIREMENT FOR TRAVEL AUTHORIZATION).\n- Authorization of an uncustomary transportation method (e.g. charter airplane) will require the President's or Vice President's approval and a showing of cost feasibility (Section A Authorizations and Responsibilities, REQUIREMENT FOR TRAVEL AUTHORIZATION).\n- Payment will be made in accordance with ACCOUNTS PAYABLE SCHEDULE OF DISBURSEMENTS for amounts over $100.00, and reimbursements less than $100.00 will be processed in accordance with the Payroll schedule (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).\n- All travelers must attach an agenda at the time of submittal of Travel Authorization of the meeting, training, and conference, etc. that they are attending (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).\n- The President shall sign Travel Authorizations for the Board of Regents (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).\n- A Travel Authorization is required for all official travel (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).\n- Blanket Travel Authorizations must be properly approved by an approving official (Fin P&P -Approved by BOR 03.11.2022_travel_Purchase.pdf).",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "L05",
+    "domain": "POLICY",
+    "question": "What are the housing rules in the Residence Life Handbook?",
+    "answer_text": "LLM unavailable",
+    "raw_response": {
+      "answer": "LLM unavailable",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  },
+  {
+    "id": "L06",
+    "domain": "POLICY",
+    "question": "What is the mission and vision of Diné College?",
+    "answer_text": "LLM unavailable",
+    "raw_response": {
+      "answer": "LLM unavailable",
+      "session_id": 1,
+      "session_name_updated": false
+    }
+  }
+]
