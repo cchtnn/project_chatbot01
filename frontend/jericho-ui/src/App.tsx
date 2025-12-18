@@ -6,6 +6,13 @@ type ChatMessage = {
   id: number
   role: 'user' | 'assistant'
   content: string
+  sources?: any[]
+  confidence?: number
+}
+
+type SessionInfo = {
+  session_id: number
+  session_name: string
 }
 
 function App() {
@@ -21,6 +28,19 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [nextId, setNextId] = useState(1)
 
+  // Sessions
+  const [sessions, setSessions] = useState<SessionInfo[]>([])
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null)
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+
+  // Rename/delete UI
+  const [sessionMenuOpenId, setSessionMenuOpenId] = useState<number | null>(
+    null
+  )
+  const [showRenameModal, setShowRenameModal] = useState(false)
+  const [renameSessionId, setRenameSessionId] = useState<number | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+
   // Upload state
   const [showUpload, setShowUpload] = useState(false)
   const [uploadFiles, setUploadFiles] = useState<FileList | null>(null)
@@ -30,12 +50,13 @@ function App() {
 
   // Auto-scroll anchor
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
-
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages])
+
+  // ---------- LOGIN ----------
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -50,7 +71,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
-        credentials: 'include', // important for cookies
+        credentials: 'include',
       })
       if (!resp.ok) {
         throw new Error(`HTTP ${resp.status}`)
@@ -66,9 +87,190 @@ function App() {
     }
   }
 
+  // Once we are on chat, load sessions
+  useEffect(() => {
+    if (screen === 'chat') {
+      loadSessions()
+    }
+  }, [screen])
+
+  // ---------- SESSIONS + HISTORY ----------
+
+  const loadSessions = async () => {
+    setSessionsLoading(true)
+    try {
+      const resp = await fetch('http://localhost:8000/user_sessions', {
+        method: 'GET',
+        credentials: 'include',
+      })
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+      const data = await resp.json()
+      const list: SessionInfo[] = data.sessions || []
+      setSessions(list)
+
+      if (list.length > 0) {
+        const last = list[list.length - 1]
+        setCurrentSessionId(last.session_id)
+        await loadHistory(last.session_id)
+      } else {
+        await handleNewChat()
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSessionsLoading(false)
+    }
+  }
+
+  const loadHistory = async (sessionId: number) => {
+    try {
+      const resp = await fetch(
+        `http://localhost:8000/history?session_id=${sessionId}`,
+        {
+          method: 'GET',
+          credentials: 'include',
+        }
+      )
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+      const data = await resp.json()
+      const history = data.history || []
+      const mapped: ChatMessage[] = []
+      let idCounter = 1
+      for (const item of history) {
+        if (item.question) {
+          mapped.push({
+            id: idCounter++,
+            role: 'user',
+            content: item.question,
+          })
+        }
+        if (item.answer) {
+          mapped.push({
+            id: idCounter++,
+            role: 'assistant',
+            content: item.answer,
+          })
+        }
+      }
+      setMessages(mapped)
+      setNextId(idCounter)
+    } catch (err) {
+      console.error(err)
+      setMessages([])
+      setNextId(1)
+    }
+  }
+
+  const handleNewChat = async () => {
+    try {
+      const resp = await fetch('http://localhost:8000/new_session', {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+      const data = await resp.json()
+      const sessionId: number = data.session_id
+      const newSession: SessionInfo = {
+        session_id: sessionId,
+        session_name: 'New Chat',
+      }
+      setSessions((prev) => [...prev, newSession])
+      setCurrentSessionId(sessionId)
+      setMessages([])
+      setNextId(1)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleSelectSession = async (sessionId: number) => {
+    if (sessionId === currentSessionId) return
+    setCurrentSessionId(sessionId)
+    await loadHistory(sessionId)
+  }
+
+  // ---------- SESSION RENAME / DELETE ----------
+
+  const openRenameModal = (session: SessionInfo) => {
+    setRenameSessionId(session.session_id)
+    setRenameValue(session.session_name)
+    setShowRenameModal(true)
+    setSessionMenuOpenId(null)
+  }
+
+  const handleRenameSubmit = async () => {
+    if (!renameSessionId) return
+    const name = renameValue.trim() || 'New Chat'
+    try {
+      const form = new FormData()
+      form.append('session_id', String(renameSessionId))
+      form.append('new_name', name)
+
+      const resp = await fetch('http://localhost:8000/rename_session', {
+        method: 'POST',
+        body: form,
+        credentials: 'include',
+      })
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.session_id === renameSessionId ? { ...s, session_name: name } : s
+        )
+      )
+      setShowRenameModal(false)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleDeleteSession = async (sessionId: number) => {
+    try {
+      const form = new FormData()
+      form.append('session_id', String(sessionId))
+
+      const resp = await fetch('http://localhost:8000/delete_session', {
+        method: 'POST',
+        body: form,
+        credentials: 'include',
+      })
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+
+      setSessions((prev) => prev.filter((s) => s.session_id !== sessionId))
+      setSessionMenuOpenId(null)
+
+      if (currentSessionId === sessionId) {
+        const remaining = sessions.filter((s) => s.session_id !== sessionId)
+        if (remaining.length > 0) {
+          const last = remaining[remaining.length - 1]
+          setCurrentSessionId(last.session_id)
+          await loadHistory(last.session_id)
+        } else {
+          setCurrentSessionId(null)
+          setMessages([])
+          setNextId(1)
+          await handleNewChat()
+        }
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // ---------- CHAT SEND USING /react-query (with sources) ----------
+
   const handleSend = async () => {
     const q = input.trim()
-    if (!q) return
+    if (!q || !currentSessionId) return
     setInput('')
 
     const userMessage: ChatMessage = {
@@ -81,10 +283,14 @@ function App() {
     setLoading(true)
 
     try {
-      const resp = await fetch('http://localhost:8000/api/v1/react-query', {
+      const resp = await fetch('http://localhost:8000/react-query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, sessionid: 1, private: false }),
+        body: JSON.stringify({
+          query: q,
+          sessionid: currentSessionId,
+          private: false,
+        }),
         credentials: 'include',
       })
       if (!resp.ok) {
@@ -95,6 +301,9 @@ function App() {
         id: nextId + 1,
         role: 'assistant',
         content: data.answer ?? 'No answer field in response.',
+        sources: data.sources || [],
+        confidence:
+          typeof data.confidence === 'number' ? data.confidence : undefined,
       }
       setNextId(nextId + 2)
       setMessages((prev) => [...prev, assistantMessage])
@@ -112,20 +321,25 @@ function App() {
     }
   }
 
+  // ---------- UPLOAD USING /upload ----------
+
   const handleUpload = async () => {
     if (!uploadFiles || uploadFiles.length === 0) {
       setUploadStatus('Please select at least one file.')
+      return
+    }
+    if (!currentSessionId) {
+      setUploadStatus('No active session selected.')
       return
     }
     setUploadLoading(true)
     setUploadStatus(null)
     try {
       const form = new FormData()
-      // backend expects: files (one or more), session_id, private
       Array.from(uploadFiles).forEach((file) => {
         form.append('files', file)
       })
-      form.append('session_id', '1')
+      form.append('session_id', String(currentSessionId))
       form.append('private', uploadPrivate ? 'true' : 'false')
 
       const resp = await fetch('http://localhost:8000/upload', {
@@ -149,20 +363,36 @@ function App() {
     }
   }
 
+  // ---------- LOGOUT ----------
+
+  const handleLogout = async () => {
+    try {
+      await fetch('http://localhost:8000/logout', {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch (e) {
+      console.error(e)
+    }
+    setUsername('')
+    setPassword('')
+    setRole(null)
+    setSessions([])
+    setCurrentSessionId(null)
+    setMessages([])
+    setScreen('login')
+  }
+
+  // ---------- RENDER ----------
+
   if (screen === 'login') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        {/* Top-left logos */}
         <div className="absolute top-6 left-6 flex items-center gap-3">
           <img
             src="https://www.dinecollege.edu/wp-content/uploads/2024/12/dc_logoFooter.png"
             alt="Diné College"
             className="h-10 rounded-md object-contain"
-          />
-          <img
-            src="http://localhost:8000/static/jericho_image.jpg"
-            alt="Jericho"
-            className="h-8 object-contain"
           />
         </div>
 
@@ -170,10 +400,6 @@ function App() {
           <h1 className="text-2xl font-semibold mb-2">
             Diné College Assistant
           </h1>
-          <p className="text-sm text-slate-200 mb-4">
-            Sign in with your Jericho account. Default admin:{' '}
-            <span className="font-mono text-amber-300">admin / admin123</span>
-          </p>
 
           {loginError && (
             <div className="mb-4 text-sm text-red-300 bg-red-900/40 border border-red-400/60 rounded px-3 py-2">
@@ -213,7 +439,6 @@ function App() {
     )
   }
 
-  // Chat screen
   return (
     <div className="min-h-screen flex flex-col bg-slate-100">
       <header className="h-14 px-4 flex items-center justify-between bg-white border-b">
@@ -222,11 +447,6 @@ function App() {
             src="https://www.dinecollege.edu/wp-content/uploads/2024/12/dc_logoFooter.png"
             alt="Diné College"
             className="h-8 rounded-md object-contain"
-          />
-          <img
-            src="http://localhost:8000/static/jericho_image.jpg"
-            alt="Jericho"
-            className="h-7 object-contain"
           />
           <span className="font-semibold text-slate-800">
             Diné College Assistant (Jericho)
@@ -239,18 +459,82 @@ function App() {
               Admin
             </span>
           )}
+          <button
+            className="text-xs px-3 py-1 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100"
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
         </div>
       </header>
+
       <main className="flex-1 flex">
-        <aside className="w-64 border-r bg-white p-3">
-          <button className="w-full mb-3 rounded-md bg-amber-500 hover:bg-amber-400 text-sm font-semibold py-2 text-slate-900">
+        <aside className="w-64 border-r bg-white p-3 flex flex-col">
+          <button
+            className="w-full mb-3 rounded-md bg-amber-500 hover:bg-amber-400 text-sm font-semibold py-2 text-slate-900 disabled:opacity-60"
+            onClick={handleNewChat}
+            disabled={sessionsLoading}
+          >
             New chat
           </button>
-          <div className="text-xs text-slate-500 px-1">Chats</div>
-          <div className="mt-2 text-xs text-slate-400">
-            (Chat history UI coming next)
+
+          <div className="text-xs text-slate-500 px-1 mb-2 flex items-center justify-between">
+            <span>Chats</span>
+            {sessionsLoading && <span className="text-[10px]">Loading…</span>}
+          </div>
+
+          <div className="flex-1 overflow-auto text-sm">
+            {sessions.length === 0 && !sessionsLoading && (
+              <div className="text-xs text-slate-400 px-1">
+                No sessions yet. Click “New chat”.
+              </div>
+            )}
+            {sessions.map((s) => (
+              <div
+                key={s.session_id}
+                className={`flex items-center mb-1 rounded-md ${
+                  s.session_id === currentSessionId
+                    ? 'bg-slate-900 text-amber-200'
+                    : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                <button
+                  className="flex-1 text-left px-2 py-1.5 truncate hover:bg-slate-800/10"
+                  onClick={() => handleSelectSession(s.session_id)}
+                >
+                  {s.session_name || `Session ${s.session_id}`}
+                </button>
+                <button
+                  className="px-2 text-xs hover:bg-slate-800/20 rounded-r-md"
+                  onClick={() =>
+                    setSessionMenuOpenId(
+                      sessionMenuOpenId === s.session_id ? null : s.session_id
+                    )
+                  }
+                >
+                  ⋮
+                </button>
+                {sessionMenuOpenId === s.session_id && (
+                  <div className="absolute ml-40 mt-10 z-50 bg-white border border-slate-200 rounded-md shadow-md text-xs text-slate-700">
+                    <button
+                      className="block w-full px-3 py-1 hover:bg-slate-100 text-left"
+                      onClick={() => openRenameModal(s)}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      className="block w-full px-3 py-1 hover:bg-red-50 text-left text-red-600"
+                      onClick={() => handleDeleteSession(s.session_id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </aside>
+
         <section className="flex-1 flex flex-col">
           <div className="flex-1 p-4 overflow-auto bg-slate-50">
             <div className="max-w-3xl mx-auto space-y-3">
@@ -275,6 +559,28 @@ function App() {
                     }`}
                   >
                     {m.content}
+                    {m.role === 'assistant' &&
+                      m.sources &&
+                      m.sources.length > 0 && (
+                        <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
+                          <div className="font-semibold mb-1">Sources</div>
+                          <ul className="list-disc pl-4 space-y-1">
+                            {m.sources
+                              .slice(0, 4)
+                              .map((s: any, idx: number) => (
+                                <li key={idx}>
+                                  {s.filename || s.title || 'Source'}{' '}
+                                  {s.page && <span>(p. {s.page})</span>}
+                                </li>
+                              ))}
+                          </ul>
+                          {typeof m.confidence === 'number' && (
+                            <div className="mt-1 text-[11px] text-slate-500">
+                              Confidence: {Math.round(m.confidence * 100)}%
+                            </div>
+                          )}
+                        </div>
+                      )}
                   </div>
                 </div>
               ))}
@@ -288,10 +594,10 @@ function App() {
                 </div>
               )}
 
-              {/* anchor for auto-scroll */}
               <div ref={messagesEndRef} />
             </div>
           </div>
+
           <div className="border-t bg-white p-3 flex items-center gap-2">
             <button
               className="rounded-md border border-slate-300 text-sm px-3 py-2 text-slate-700 hover:bg-slate-100"
@@ -300,13 +606,18 @@ function App() {
                 setUploadFiles(null)
                 setUploadStatus(null)
               }}
+              disabled={!currentSessionId}
             >
               Upload
             </button>
             <textarea
               className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               rows={1}
-              placeholder="Ask a question about Diné College…"
+              placeholder={
+                currentSessionId
+                  ? 'Ask a question about Diné College…'
+                  : 'Waiting for session…'
+              }
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -315,10 +626,11 @@ function App() {
                   if (!loading) handleSend()
                 }
               }}
+              disabled={!currentSessionId}
             />
             <button
               className="rounded-md bg-amber-500 hover:bg-amber-400 text-sm font-semibold px-4 py-2 text-slate-900 disabled:opacity-60"
-              disabled={loading || !input.trim()}
+              disabled={loading || !input.trim() || !currentSessionId}
               onClick={handleSend}
             >
               {loading ? 'Sending...' : 'Send'}
@@ -375,6 +687,35 @@ function App() {
                 disabled={uploadLoading}
               >
                 {uploadLoading ? 'Uploading...' : 'Upload'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename modal */}
+      {showRenameModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-5">
+            <h2 className="text-base font-semibold mb-3">Rename chat</h2>
+            <input
+              type="text"
+              className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-3 py-1.5 text-xs rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100"
+                onClick={() => setShowRenameModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-1.5 text-xs rounded-md bg-amber-500 text-slate-900 font-semibold hover:bg-amber-400"
+                onClick={handleRenameSubmit}
+              >
+                Save
               </button>
             </div>
           </div>

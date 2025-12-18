@@ -307,3 +307,12 @@ async def react_query(
     except Exception as e:
         logger.error(f"[react-query] orchestrator error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Query failed")
+
+from fastapi import Response
+
+@router.post("/logout")
+async def logout(response: Response):
+    # Adjust cookie name if your token cookie is named differently
+    response.delete_cookie("access_token")
+    # You can also delete refresh token etc. if you use them
+    return {"success": True}

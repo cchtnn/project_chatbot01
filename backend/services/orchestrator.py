@@ -20,7 +20,6 @@ from services.rag_pipeline import RAGPipeline
 logger = get_logger(__name__)
 settings = get_settings()
 
-
 TOOL_MAP = {
     "TranscriptTool": transcript_answer,
     "PayrollTool": payroll_answer,
@@ -70,26 +69,40 @@ class Orchestrator:
 
                     # Payroll-specific parameter extraction
                     if tool_name == "PayrollTool":
-                        q = request.query.lower()
+                        q = request.query
+                        q_lower = q.lower()
 
                         # Year detection
-                        m_year = re.search(r"\b(20[0-9]{2})\b", q)
+                        m_year = re.search(r"\b(20[0-9]{2})\b", q_lower)
                         if m_year:
                             params["year"] = int(m_year.group(1))
 
                         # Check-date detection: e.g., 2/6/2026 or 02/06/26
-                        m_date = re.search(r"(\d{1,2}/\d{1,2}/\d{2,4})", q)
+                        m_date = re.search(r"(\d{1,2}/\d{1,2}/\d{2,4})", q_lower)
                         if m_date:
                             params["check_date"] = m_date.group(1)
 
                         # Period detection: e.g., "from 1/17/2026 to 1/30/2026"
                         m_period = re.search(
                             r"from\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+(to|through|till|-)\s+(\d{1,2}/\d{1,2}/\d{2,4})",
-                            q,
+                            q_lower,
                         )
                         if m_period:
                             params["start_date"] = m_period.group(1)
                             params["end_date"] = m_period.group(3)
+
+                        # Pay period / payroll number detection → payroll_no
+                        # Handles: "pay period 3", "Pay Period number 3", "payroll number 10"
+                        m_payroll_no = re.search(
+                            r"(pay\s*period|payroll|payroll\s*number|pay\s*period\s*number)\s*(no\.?|number)?\s*(\d+)",
+                            q_lower,
+                        )
+                        if m_payroll_no:
+                            params["payroll_no"] = int(m_payroll_no.group(3))
+
+                        # Ask for date difference (flags the tool to compute day deltas)
+                        if "difference" in q_lower and "day" in q_lower:
+                            params["ask_days_diff"] = True
 
                     result = TOOL_MAP[tool_name](request.query, params)
                     tool_results.append(result)
