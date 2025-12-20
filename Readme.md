@@ -1,350 +1,480 @@
-```markdown
 # Jericho Enterprise RAG Chatbot
 
-Multi‑domain RAG chatbot (HR, payroll, student policies, transcripts) built with FastAPI, ChromaDB, and open‑source LLM tooling.  
-Tested with 36+ Diné College documents (PDF/CSV/DOCX/JSON), ~3,800 chunks indexed.
+## 1. Setting up on a new machine / VDI
 
----
+> Repo: https://github.com/yesitsrg/project_chatbot01.git  
+> Root folder after clone: `jericho/` (backend + frontend inside)
 
-## 1. Prerequisites (Windows / VDI)
-
-### 1.1 System
+### 1.1 Prerequisites (once per VDI)
 
 - Windows 10/11
-- Python 3.10 (recommended)
-- Git
-- VS Code (optional but recommended)
+- Python 3.10 (recommended, 64-bit)
+- Node.js 18+ (for React frontend)
+- Git installed
+- Internet access (for `pip` / `npm` and Groq API, if used)
 
-### 1.2 Tesseract OCR
+#### Install Tesseract OCR
 
-Used for OCR on scanned PDFs.
+1. Download Windows installer (UB Mannheim build):  
+   https://github.com/UB-Mannheim/tesseract/wiki  
+2. Install to:  
+   `C:\Program Files\Tesseract-OCR\tesseract.exe` (default)  
+3. Optional quick check (PowerShell):
 
-1. Download installer (Windows):
-   - https://github.com/UB-Mannheim/tesseract/wiki
-2. Install to default path:
-   - `C:\Program Files\Tesseract-OCR\tesseract.exe`
+   ```
+   & "C:\Program Files\Tesseract-OCR\tesseract.exe" --version
+   ```
 
-### 1.3 Poppler (for pdf2image)
+#### Install Poppler (for pdf2image)
 
-Used for rasterizing PDFs before OCR when needed.
+1. Download Windows build:  
+   https://github.com/oschwartz10612/poppler-windows/releases
+2. Extract to e.g.:  
+   `C:\poppler-24.02.0\Library\bin\pdftoppm.exe`
+3. Add Poppler bin to PATH for current session:
 
-1. Download Windows build:
-   - https://github.com/oschwartz10612/poppler-windows/releases
-2. Extract somewhere, e.g.:
-   - `C:\tools\poppler-24.02.0\`
-3. Add to PATH (PowerShell, per‑session):
-```
+   ```
+   $env:PATH += ";C:\poppler-24.02.0\Library\bin"
+   ```
 
-$env:PATH = "C:\tools\poppler-24.02.0\Library\bin;$env:PATH"
-
-```
-
----
-
-## 2. Clone and create virtualenv
-
-Open PowerShell in VS Code (or terminal) and run:
+### 1.2 Clone repo
 
 ```
-
-# 1) Clone
-
-git clone <YOUR-REPO-URL> jericho-backend
-cd jericho-backend
-
-# 2) Create venv
-
-python -m venv venv_p310
-
-# 3) Activate venv
-
-.\venv_p310\Scripts\Activate.ps1
-
-# 4) Upgrade pip and install deps
-
-pip install --upgrade pip
-pip install -r requirements.txt
-
+# From any folder where you keep projects
+git clone https://github.com/yesitsrg/project_chatbot01.git jericho
+cd jericho
 ```
 
-Ensure `requirements.txt` includes (among others):
+Directory (expected):
 
 ```
-
-fastapi
-uvicorn[standard]
-chromadb
-sentence-transformers
-pypdf
-pdfplumber
-python-docx
-openpyxl
-python-pptx
-markdown
-pytesseract
-pillow
-pdf2image
-pandas
-numpy<2.0.0
-groq
-langchain
-langchain-community
-langchain-ollama
-
+jericho/
+  backend/
+  frontend/
+  ingestall.py
+  Readme.md  (this file)
+  data/      (created later if not present)
 ```
 
----
-
-## 3. Environment configuration
-
-Project uses `.env` and/or OS environment variables for secrets and paths.
-
-### 3.1 .env file (recommended)
-
-Create a file `.env` in the project root:
+### 1.3 Backend setup (FastAPI + RAG)
 
 ```
-
-# LLM provider
-
-LLM_PROVIDER=groq
-
-# Groq LLM
-
-GROQ_API_KEY=your_groq_api_key_here
-GROQ_MODEL=llama-3.1-8b-instant
-
-# Optional: Ollama fallback (if running locally)
-
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
-
-# Tesseract path (Windows)
-
-TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe
-
-```
-
-### 3.2 Alternatively, set env vars in PowerShell
-
-```
-
-$env:GROQ_API_KEY = "your_groq_key_here"
-$env:LLM_PROVIDER = "groq"
-$env:GROQ_MODEL = "llama-3.1-8b-instant"
-
-$env:TESSERACT_CMD = "C:\Program Files\Tesseract-OCR\tesseract.exe"
-$env:PATH = "C:\tools\poppler-24.02.0\Library\bin;$env:PATH"
-
-```
-
----
-
-## 4. Tesseract configuration in code
-
-In `services/document_parser.py` the hardcoded path:
-
-```
-
-import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-
-```
-
-has been replaced with env‑based config:
-
-```
-
-import os
-import pytesseract
-
-tesseract_cmd = os.getenv("TESSERACT_CMD")
-if tesseract_cmd:
-pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-
-```
-
-Make sure `TESSERACT_CMD` is set before running the app.
-
----
-
-## 5. Initial document ingest
-
-This builds the ChromaDB index from documents (PDF/CSV/DOCX/JSON) under `data/documents/`.
-
-From the repo root (where `ingest_all.py` lives):
-
-```
-
-.\venv_p310\Scripts\Activate.ps1
-cd backend # if your code is under backend/, adjust if needed
-
-python ingest_all.py
-
-```
-
-You should see logs like:
-
-- `ChromaDB ready: 0 chunks`
-- `Ingested ...`
-- `ChromaDB ready: 3830 chunks`
-
-If you change documents, re‑run `ingest_all.py` to update the index.
-
----
-
-## 6. Run the FastAPI app
-
-From the same venv:
-
-```
-
-.\venv_p310\Scripts\Activate.ps1
 cd backend
 
+# Create & activate venv
+python -m venv venvp310
+.\venvp310\Scripts\Activate.ps1
+
+# Install backend dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Set environment variables (for this PowerShell session):
+
+```
+# Tesseract path
+$env:TESSERACT_CMD = "C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+# Poppler path (already added above, repeat if new session)
+$env:PATH += ";C:\poppler-24.02.0\Library\bin"
+
+# Groq API key (optional if using Groq)
+$env:GROQ_API_KEY = "your-groq-key"
+$env:LLMPROVIDER = "groq"    # or "ollama" for local models
+```
+
+Alternatively, create `.env` in `backend/`:
+
+```
+LLMPROVIDER=groq
+GROQ_API_KEY=your-groq-key
+GROQ_MODEL=llama-3.1-8b-instant
+TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe
+```
+
+### 1.4 Documents + ingestion
+
+On your original machine you already ingested 36 Diné College files (HR, payroll, transcripts, etc.) into Chroma. On a new machine, copy those source documents into the repo and re-ingest.
+
+```
+cd backend
+
+# Ensure documents folder exists
+New-Item -ItemType Directory -Force -Path data\documents | Out-Null
+
+# Copy your domain docs (from old VDI / shared drive) into:
+# jericho\backend\data\documents\
+# e.g.
+#   data\documents\hrpolicies\*.pdf
+#   data\documents\payroll\*.csv
+#   data\documents\transcripts\*.csv
+#   data\documents\borplanner\*.pdf
+
+# Build vector index (ChromaDB)
+python ingestall.py
+# Expect logs like:
+# "INGEST STATS processed 36, failed 0"
+# "ChromaDB ready XXXX chunks"
+```
+
+### 1.5 Start backend API
+
+```
+cd backend
+.\venvp310\Scripts\Activate.ps1
+
 uvicorn app:app --reload --port 8000
-
 ```
 
-Then open in browser:
+Check:
 
-- Chat UI: `http://localhost:8000/chat`
-- Admin UI: `http://localhost:8000/admin`
-- OpenAPI docs: `http://localhost:8000/docs`
+```
+Invoke-RestMethod -Uri http://localhost:8000/api/v1/health
+# Should return JSON with status, chunk counts, providers
+```
+
+### 1.6 Frontend setup (React)
+
+```
+cd ..\frontend
+
+npm install
+npm start
+```
+
+- React dev server: http://localhost:3000
+- It calls backend at http://localhost:8000 (CORS enabled in `backend/app.py`)
 
 ---
 
-## 7. Quick backend sanity test
-
-There is a small script (e.g. `temp.py`) that checks retrieval and answers:
+## 2. Project structure (high level)
 
 ```
-
-from core import init_logger
-init_logger()
-from services.rag_pipeline import RAGPipeline
-
-rag = RAGPipeline()
-
-queries = [
-"What is the check date for Pay period 3?",
-"How many payroll periods are in calendar year 2026?",
-"What are the employee health benefits?",
-"What is the student code of conduct?",
-]
-
-print("GENERIC RAG TEST ACROSS ALL FORMATS\n")
-
-for q in queries:
-result = rag.query(q, top_k=10)
-print("Q:", q)
-print(" Agent:", result.get("agent"))
-print(" Answer:", result.get("answer", "")[:300])
-print()
-
+jericho/
+├── backend/
+│   ├── app.py               # FastAPI app, mounts API & CORS
+│   ├── config.py            # Settings (env, paths, LLM provider)
+│   ├── core/
+│   │   ├── logger.py        # Structured logging (file + console)
+│   │   ├── constants.py     # Enums, dirs, chunk sizes, modes
+│   │   ├── embeddings.py    # SentenceTransformer wrapper
+│   │   └── retrieval.py     # Hybrid BM25 + vector retrieval
+│   ├── models/
+│   │   ├── schemas.py       # Pydantic API models
+│   │   └── document.py      # SQLAlchemy + Pydantic doc metadata
+│   ├── services/
+│   │   ├── documentparser.py    # Multi-format parser + OCR chain
+│   │   ├── textprocessor.py     # Chunking / cleaning
+│   │   ├── dataviews.py         # Payroll / transcript table loaders
+│   │   ├── dfagent.py           # Pandas DataFrame agent wrapper
+│   │   ├── tools/
+│   │   │   ├── transcripttool.py  # Transcript-specific agent
+│   │   │   ├── payrolltool.py     # Payroll calendar agent
+│   │   │   └── ...                # BOR / planner tools, etc.
+│   │   ├── orchestrator.py     # Agentic routing + answer synthesis
+│   │   └── ragpipeline.py      # RAG pipeline (ingest + query)
+│   ├── api/
+│   │   ├── health.py           # /api/v1/health
+│   │   └── routes.py           # /api/v1/query, /upload, sessions*
+│   ├── db/
+│   │   └── chromadbmanager.py  # ChromaDB wrapper
+│   ├── data/
+│   │   ├── documents/          # Source docs (copied by you)
+│   │   └── vectorstore/        # Chroma persistence
+│   └── ingestall.py            # Bulk ingest script
+└── frontend/
+    ├── src/                    # React components
+    ├── package.json
+    └── ...                     # Standard React app layout
 ```
 
-Run:
+Endpoints used by frontend (aligned with original app):
 
-```
-
-python temp.py
-
-```
-
-You should see:
-
-- `Enterprise RAG v2.0 ready - Multi-Modal`
-- Reasonable answers with `agent` values like `text_rag` or `table_agent`.
+- `POST /api/v1/query` – main chat endpoint (form/json; includes `query`, `sessionid`, `private`)
+- `POST /api/v1/upload` – upload docs into KB
+- `POST /api/v1/newsession`, `GET /api/v1/usersessions`, etc. – session management (where implemented)
+- `GET /api/v1/health` – health check
 
 ---
 
-## 8. Using the chat UI
+## 3. Git remote / repo notes
 
-1. Start the server (`uvicorn app:app --reload --port 8000`).
-2. Open `http://localhost:8000/chat`.
-3. Create a new session (handled automatically by UI).
-4. Ask questions such as:
-   - “What is the check date for Pay period 3?”
-   - “How many payroll periods are in calendar year 2026?”
-   - “What employee health benefits are provided?”
-   - “Summarize the student code of conduct.”
-
-Answers are produced by the `RAGPipeline` using hybrid retrieval + multi‑modal agents.
-
----
-
-## 9. Uploading new documents
-
-You can upload additional documents via the UI:
-
-1. Go to `http://localhost:8000/chat`.
-2. Use the upload control to send PDF/CSV/DOCX/JSON files.
-3. Backend saves to `data/documents/` and ingests through `RAGPipeline.ingest_documents`.
-
-Or, place files manually under `data/documents/` and run:
+Your current repo is:
 
 ```
-
-python ingest_all.py
-
+origin  https://github.com/yesitsrg/project_chatbot01.git (fetch)
+origin  https://github.com/yesitsrg/project_chatbot01.git (push)
 ```
 
----
+If this is correct (and matches GitHub), no change is needed.
 
-## 10. Running tests (optional)
-
-If you add tests under `tests/`, you can run:
+If you ever need to fix it:
 
 ```
+cd jericho
 
-.\venv_p310\Scripts\Activate.ps1
-pytest -q
+# See current remotes
+git remote -v
 
+# Reset origin
+git remote remove origin
+git remote add origin https://github.com/yesitsrg/project_chatbot01.git
+
+# First commit & push (only once)
+git add .
+git commit -m "Initial commit Jericho enterprise RAG chatbot"
+git branch -M main
+git push -u origin main
+```
+
+On a new VDI, you just:
+
+```
+git clone https://github.com/yesitsrg/project_chatbot01.git jericho
+# then follow Section 1
 ```
 
 ---
 
-## 11. Common issues
+## 4. Enterprise RAG techniques used (with examples & impact)
 
-- **Tesseract not found**:
-  Ensure Tesseract is installed and `TESSERACT_CMD` is set to the correct `tesseract.exe` path.
+This project is intentionally “enterprise-grade” and incorporates several advanced RAG design patterns. Here is what to study and where it shows up in the code.
 
-- **Poppler missing** (`pdf2image` errors):
-  Ensure Poppler `bin` folder is on PATH before running `ingest_all.py`.
+### 4.1 Multi-format, fault-tolerant parsing (DocumentParser)
 
-- **Groq 401/403**:
-  Check `GROQ_API_KEY` and `GROQ_MODEL` values in `.env`.
+**What:**  
+A “bulletproof” parser that handles many formats and recovers from bad PDFs:
 
-- **No answers / hallucinations**:
-  Re‑run `python ingest_all.py` after updating documents. Confirm `ChromaDB ready: N chunks` is non‑zero.
+- PDF: `pymupdf` → `pdfplumber` (text+tables) → `pdf2image + Tesseract` OCR fallback
+- DOCX: `python-docx` (paragraphs, tables)
+- CSV/XLSX: `pandas.read_csv/read_excel` → markdown tables
+- JSON: `json` → pretty-printed text
+- Images: `pytesseract` then `easyocr` fallback
+- PPTX: text extraction with fallback to plain text
+
+**Where:** `backend/services/documentparser.py`  
+**Why:** Some Diné College PDFs are scanned or have broken text layers. This chain:
+
+- Greatly reduces “file failed to ingest” cases (you saw ~97% success vs many failures earlier).
+- Extracts tables into structured text so payroll and transcript data are usable.
+
+**Impact (observed earlier):**
+
+- Previously failed PDFs (catalog, handbook) now parse, adding ~2000+ extra chunks.
+- Ingestion stats improved from ~77–80% success to ~97–100% for your test corpus.
+
+### 4.2 Semantic chunking with metadata (TextProcessor)
+
+**What:**
+
+- Splits content into chunks of ~1000 characters with 200-character overlap.
+- Respects simple semantic boundaries (paragraph / heading breaks).
+- Attaches detailed metadata per chunk (document id, filename, page number, domain, etc.).
+
+**Where:** `backend/services/textprocessor.py`  
+
+**Why:**
+
+- Smaller chunks → more precise retrieval (less noise).
+- Overlap → enough context for the LLM to answer without missing the surrounding text.
+- Metadata → enables source citations and domain filtering (e.g., only HR, only payroll).
+
+**Impact:**
+
+- Better answer grounding (easier to show “this line came from HR policy PDF page 7”).
+- Enabled future features like domain-scoped search (HR vs transcripts vs BOR).
+
+### 4.3 Hybrid retrieval (BM25 + vector + rerank)
+
+**What:**
+
+- Uses semantic vector search (ChromaDB + SentenceTransformers) AND keyword-based BM25.
+- Merges results using Reciprocal Rank Fusion (RRF).
+- Optionally reranks using a cross-encoder (e.g., ms-marco based model).
+
+**Where:** `backend/core/retrieval.py`, `backend/db/chromadbmanager.py`, `backend/services/ragpipeline.py`
+
+**Why:**
+
+- Pure embeddings miss exact numeric / keyword queries (e.g., “pay period 3”, dates).
+- Pure BM25 misses semantic / paraphrased queries.
+- Hybrid ensures both precise matching and semantic understanding.
+
+**Impact:**
+
+- Higher recall for tricky queries (payroll dates, specific terms).
+- More relevant top-5 chunks for the LLM to answer from, reducing hallucinations.
+
+### 4.4 Domain-specific agents (“agentic RAG”)
+
+**What:**
+
+Instead of a single generic RAG, the system routes queries to specialized tools:
+
+- TranscriptTool – operates on merged transcript CSV (GPA, courses, counts).
+- PayrollTool – operates on payroll calendar CSV (pay periods, check dates, counts).
+- BOR/PlannerTool – operates on BOR schedule / planner.
+- Generic RAG – for policy, handbook, catalog-type questions.
+
+A planner/orchestrator decides which tool to call based on query content.
+
+**Where:**
+
+- `backend/services/tools/transcripttool.py`
+- `backend/services/tools/payrolltool.py`
+- `backend/services/orchestrator.py`
+- `backend/services/dataviews.py` (loads dataframes)
+- `backend/services/dfagent.py` (pandas DataFrame agent for free-form table questions)
+
+**Examples:**
+
+- “What is the check date for Pay period 3?” → PayrollTool:
+  - Interpret “Pay period 3” → row in payroll CSV → return check date for period 3.
+- “Give me the GPA details of Trista Barrett.” → TranscriptTool:
+  - Filter transcript dataframe by student name → return term + cumulative GPA.
+
+**Why:**
+
+- Generic RAG on CSV text is unreliable for structured questions (dates, counts, numeric queries).
+- Agents let you use pandas & explicit logic for tables, while still using LLM for explanation.
+
+**Impact (from your benchmarks):**
+
+- Payroll questions that previously failed (“Unable to process…” or wrong dates) can now be answered correctly.  
+- Transcript questions avoid NaN / nonsense GPA hallucinations and provide structured answers.
+
+### 4.5 Dataframe agent (LangChain + pandas)
+
+**What:**
+
+- Wraps a pandas DataFrame in a LangChain “pandas dataframe agent” so LLM can generate code-like operations over the table to answer questions.
+- Used as a fallback in TranscriptTool / PayrollTool when no simple rule applies.
+
+**Where:** `backend/services/dfagent.py`  
+
+**Why:**
+
+- You cannot hand-code every possible analytic query (“top N students”, “average GPA by term”) for transcripts / payroll.
+- The dataframe agent can handle flexible slice/filter/aggregation queries using LLM-powered pandas code, constrained to your data.
+
+**Impact:**
+
+- Better support for analytic queries (counts, averages, grouped summaries) without writing many custom functions.
+- Still keeps data grounded because the agent only uses the loaded dataframe.
+
+*(Note: depends on `langchain-experimental` and the associated agent toolkit.)*
+
+### 4.6 Multi-provider LLM configuration
+
+**What:**
+
+- Config-driven LLM selection:
+  - `LLMPROVIDER=groq` → use Groq-hosted models (e.g., Llama 3.1).
+  - `LLMPROVIDER=ollama` → use local Ollama models (e.g., `llama3latest`).
+- Configured via `config.py` + `.env`.
+
+**Where:** `backend/config.py`, `backend/services/ragpipeline.py`, `backend/services/llmfactory.py` (if present)
+
+**Why:**
+
+- You can run fully local (Ollama) or cloud-inference (Groq) without changing code.
+- Easier migration across environments: dev VDI vs production server.
+
+**Impact:**
+
+- Flexibility for cost/performance/security trade-offs.
+- You already tested this by switching between Ollama and Groq during development.
 
 ---
 
-## 12. Project structure (high level)
+## 5. What was wrong in the old project, and how it is solved now
 
-```
+### 5.1 Old issues
 
-backend/
-app.py # FastAPI app
-api/
-routes.py # /query, /upload, sessions
-services/
-rag_pipeline.py # Enterprise RAG v2.0 (multi-modal)
-document_parser.py # Multi-format parsing + OCR
-text_processor.py # Chunking
-core/
-config.py # Settings / env
-retrieval.py # Hybrid retriever (BM25 + vector)
-embeddings.py # Sentence-transformers wrapper
-db/
-chromadb_manager.py # Vector store
-data/
-documents/ # Source docs
-vectorstore/ # ChromaDB files
-logs/ # Logs
+1. **Parsing reliability**
+   - Many PDFs (scanned, complex layout) failed to parse or produced garbage text.
+   - Important docs (catalog, handbook, HR policies) partially or not at all ingested.
+   - No proper OCR fallback chain.
 
-```
+2. **Weak retrieval**
+   - Pure vector search (or naive retrieval) missed:
+     - Numeric queries (pay period numbers, dates).
+     - Exact-match queries on table columns.
+   - Retrieval only on text, not on structured CSV/Excel.
 
-This is enough to clone, set up, ingest, and run the chatbot on any new Windows VDI with Python 3.10.
-```
+3. **No domain separation**
+   - One generic RAG path for everything.
+   - Transcript, payroll, BOR planner, and policy questions all went through the same generic answer prompt.
+   - This caused:
+     - Hallucinated GPA lists (NaN/0.00).
+     - Wrong or missing payroll dates.
+     - Generic answers where precise answers were required.
+
+4. **Auth and benchmarking difficulty**
+   - Old HTML/Jinja-based app had login, cookies, and session DB.
+   - Automated benchmarking via scripts was hard because:
+     - `query` required JWT cookies + real `sessionid`.
+   - Hard to systematically compare old vs new behavior.
+
+5. **Git / project structure confusion**
+   - Nested git repo in `backend/` made the top-level repo unmanageable.
+   - Remote URL mismatch led to push errors.
+   - README / setup instructions were outdated relative to the new architecture.
+
+### 5.2 New solutions
+
+1. **Robust parser + OCR chain**
+   - `DocumentParser` now:
+     - Uses multiple fallbacks (pymupdf → pdfplumber → pdf2image + Tesseract).
+     - Handles CSV, DOCX, PPTX, images, etc.
+   - Result: ingest success >95% on your corpus; previously failing PDFs now load correctly.
+
+2. **Hybrid retrieval + ChromaDB**
+   - ChromaDB for embeddings + BM25 for keywords.
+   - RRF / reranking improves top-k relevance.
+   - Result: better recall for both “concept” and “exact-field” queries.
+
+3. **Agentic, domain-specific tools**
+   - TranscriptTool, PayrollTool, BOR/PlannerTool, GenericRAG.
+   - Tools query structured CSV/Excel dataframes and/or Chroma context.
+   - Orchestrator routes queries by type.
+   - Result:
+     - Payroll questions handled by dedicated logic (date normalization, pay period mapping).
+     - Transcript questions use structured transcript data.
+     - Policy questions still use generic RAG.
+
+4. **Evaluation and debugging**
+   - You created benchmark questions (Book3.csv etc.) and scripts (`benchmark.py`) to:
+     - Call new backend.
+     - Compare answers with old system and/or expected answers.
+   - Debug scripts (`debugquery.py`, `debugpayrollbranch.py`, etc.) to isolate failures.
+   - Result: iterative tuning rather than guesswork.
+
+5. **Clean Git & repo organization**
+   - Removed inner `.git` from `backend` so `jericho/` is a single repo.
+   - Correct `origin` remote: `https://github.com/yesitsrg/project_chatbot01.git`.
+   - This README is up to date for:
+     - New clone on any VDI.
+     - Backend + frontend setup.
+     - Where to look in code for each RAG technique.
+
+---
+
+## 6. How to study and extend the enterprise RAG design
+
+If you want to deepen your understanding or extend this system:
+
+- **Study**:
+  - `services/documentparser.py` – multi-format parsing, OCR fallbacks.
+  - `core/retrieval.py` + `db/chromadbmanager.py` – hybrid retrieval + Chroma integration.
+  - `services/tools/transcripttool.py` and `services/tools/payrolltool.py` – domain agents.
+  - `services/dfagent.py` – pandas dataframe agent for table QA.
+  - `services/orchestrator.py` + `services/ragpipeline.py` – overall RAG orchestration.
+
+- **Extend**:
+  - Add new domain agents (e.g., “FinanceTool”, “HRBenefitsTool”) that operate on new CSV/PDF sources.
+  - Add evaluation scripts to track metrics (answer accuracy, groundedness) before/after changes.
+  - Enhance UI to expose domain filters or debug views (show retrieved chunks, table previews).
+
+This structure is now stable enough that you can clone it into any Windows VDI, follow the setup steps, and expect the same behavior as on your current machine.

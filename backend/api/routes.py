@@ -316,3 +316,5 @@ async def logout(response: Response):
     response.delete_cookie("access_token")
     # You can also delete refresh token etc. if you use them
     return {"success": True}
+
+

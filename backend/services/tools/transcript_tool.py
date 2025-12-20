@@ -1,5 +1,6 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple, List
 import pandas as pd
+
 from core import get_logger
 from services.data_views import get_transcript_df
 from models.schemas import ToolResult
@@ -8,8 +9,23 @@ from services.df_agent import run_df_agent
 logger = get_logger(__name__)
 
 
-def _find_student_name_col(df: pd.DataFrame) -> str | None:
-    cols = [c for c in df.columns]
+def _find_col(df: pd.DataFrame, target: str) -> Optional[str]:
+    """Find a column whose normalized name matches target exactly or contains it."""
+    cols = list(df.columns)
+    target_l = target.strip().lower()
+
+    for c in cols:
+        if c.strip().lower() == target_l:
+            return c
+    for c in cols:
+        cl = c.strip().lower()
+        if target_l in cl:
+            return c
+    return None
+
+
+def _find_student_name_col(df: pd.DataFrame) -> Optional[str]:
+    cols = list(df.columns)
     for c in cols:
         if c.strip().lower() == "student name":
             return c
@@ -20,15 +36,117 @@ def _find_student_name_col(df: pd.DataFrame) -> str | None:
     return None
 
 
-def _find_gpa_col(df: pd.DataFrame) -> str | None:
-    cols = [c for c in df.columns]
+def _find_gpa_col(df: pd.DataFrame) -> Optional[str]:
+    return _find_col(df, "gpa")
+
+
+def _find_quality_points_col(df: pd.DataFrame) -> Optional[str]:
+    return _find_col(df, "quality points")
+
+
+def _find_hours_gpa_col(df: pd.DataFrame) -> Optional[str]:
+    # Hours GPA is often the credit hours used in GPA calc
+    return _find_col(df, "hours gpa")
+
+
+def _compute_student_gpa(
+    sdf: pd.DataFrame,
+    gpa_col: Optional[str],
+    qp_col: Optional[str],
+    hrs_col: Optional[str],
+) -> Tuple[Optional[float], str]:
+    """
+    Compute a student's GPA from all their transcript rows.
+
+    Priority:
+    1) If a non-null GPA value exists in gpa_col, use its mean.
+    2) Else, if quality points & hours-gpa present, compute sum(QP)/sum(Hours).
+    3) Else, return None.
+    """
+    # 1) Direct GPA column
+    if gpa_col and gpa_col in sdf.columns:
+        gpa_series = pd.to_numeric(sdf[gpa_col], errors="coerce")
+        gpa_series = gpa_series.dropna()
+        if not gpa_series.empty:
+            return float(gpa_series.mean()), "from GPA column"
+
+    # 2) Derived from quality points / hours
+    if qp_col and hrs_col and qp_col in sdf.columns and hrs_col in sdf.columns:
+        qp = pd.to_numeric(sdf[qp_col], errors="coerce")
+        hrs = pd.to_numeric(sdf[hrs_col], errors="coerce")
+        mask = (hrs > 0) & qp.notna()
+        if mask.any():
+            total_qp = float(qp[mask].sum())
+            total_hrs = float(hrs[mask].sum())
+            if total_hrs > 0:
+                return total_qp / total_hrs, "from Quality Points / Hours GPA"
+
+    return None, "no numeric GPA available"
+
+
+def _normalize_name(s: str) -> str:
+    return " ".join(s.strip().lower().split())
+
+
+def _filter_student(df: pd.DataFrame, name_col: str, student_name: str) -> pd.DataFrame:
+    """Robust matching: full-name then last-name fallback."""
+    target = _normalize_name(student_name)
+
+    # Full-name contains
+    mask = df[name_col].astype(str).apply(_normalize_name).str.contains(target, na=False)
+    sdf = df[mask]
+
+    if sdf.empty:
+        parts = target.split()
+        if len(parts) >= 2:
+            last_name = parts[-1]
+            mask = df[name_col].astype(str).str.lower().str.contains(last_name, na=False)
+            sdf = df[mask]
+
+    return sdf
+
+
+def _build_courses_table(sdf: pd.DataFrame) -> List[Dict[str, Any]]:
+    cols = list(sdf.columns)
+    course_num_col = None
+    course_title_col = None
+    term_col = None
+    subterm_col = None
+    grade_col = None
+
     for c in cols:
-        if c.strip().lower() == "gpa":
-            return c
-    for c in cols:
-        if "gpa" in c.strip().lower():
-            return c
-    return None
+        cl = c.strip().lower()
+        if "course number" == cl or ("course" in cl and "number" in cl):
+            course_num_col = c
+        if "course title" == cl or ("course" in cl and "title" in cl):
+            course_title_col = c
+        if cl == "term":
+            term_col = c
+        if "subterm" in cl:
+            subterm_col = c
+        if cl == "grade":
+            grade_col = c
+
+    subset_cols = [
+        c for c in [course_num_col, course_title_col, term_col, subterm_col, grade_col] if c
+    ]
+    if not subset_cols:
+        return []
+
+    subset = (
+        sdf[subset_cols]
+        .rename(
+            columns={
+                course_num_col or "Course Number": "Course Number",
+                course_title_col or "Course Title": "Course Title",
+                term_col or "Term": "Term",
+                subterm_col or "Subterm": "Subterm",
+                grade_col or "Grade": "Grade",
+            }
+        )
+        .drop_duplicates()
+    )
+    return subset.to_dict("records")
 
 
 def answer(question: str, params: Dict[str, Any] | None = None) -> ToolResult:
@@ -47,6 +165,8 @@ def answer(question: str, params: Dict[str, Any] | None = None) -> ToolResult:
 
     name_col = _find_student_name_col(df)
     gpa_col = _find_gpa_col(df)
+    qp_col = _find_quality_points_col(df)
+    hrs_col = _find_hours_gpa_col(df)
 
     if not name_col:
         return ToolResult(
@@ -57,59 +177,216 @@ def answer(question: str, params: Dict[str, Any] | None = None) -> ToolResult:
             citations=[],
         )
 
+    q_lower = question.lower()
+
+    # ------------------------------------------------------------------
     # Single-student questions
+    # ------------------------------------------------------------------
     if student_name:
-        target = student_name.strip().lower()
-
-        mask = (
-            df[name_col]
-            .astype(str)
-            .str.lower()
-            .str.contains(target, na=False)
-        )
-        student_df = df[mask]
-
-        if student_df.empty:
-            parts = target.split()
-            if len(parts) >= 2:
-                last_name = parts[-1]
-                mask = (
-                    df[name_col]
-                    .astype(str)
-                    .str.lower()
-                    .str.contains(last_name, na=False)
-                )
-                student_df = df[mask]
-
-        if student_df.empty:
+        sdf = _filter_student(df, name_col, student_name)
+        if sdf.empty:
             return ToolResult(
                 data={},
                 explanation=f"No transcript records found for '{student_name}'.",
                 confidence=0.5,
                 format_hint="text",
-                citations=[],
+                citations=["merged_transcripts.csv"],
             )
 
-        row = student_df.iloc[0].to_dict()
-        gpa_val = None
-        if gpa_col and gpa_col in row:
-            try:
-                gpa_val = float(row[gpa_col])
-            except Exception:
-                gpa_val = row[gpa_col]
+        # Compute GPA from all rows for this student
+        gpa_val, gpa_source = _compute_student_gpa(sdf, gpa_col, qp_col, hrs_col)
 
-        explanation = f"GPA details for {row.get(name_col, student_name)}: GPA = {gpa_val}."
+        display_name = str(sdf.iloc[0][name_col])
+        courses = _build_courses_table(sdf)
+
+        # Tailor explanation to question type
+        if "course" in q_lower and ("which" in q_lower or "what" in q_lower):
+            if not courses:
+                explanation = (
+                    f"Courses for {display_name} could not be determined from the transcript data."
+                )
+            else:
+                # Simple text list so UI does not break
+                lines = [
+                    f"- {c.get('Course Number', '')} {c.get('Course Title', '')} "
+                    f"({c.get('Term', '')} {c.get('Subterm', '')})"
+                    for c in courses
+                ]
+                explanation = (
+                    f"Courses which {display_name} has enrolled:\n" + "\n".join(lines)
+                )
+            return ToolResult(
+                data={"student": display_name, "courses": courses},
+                explanation=explanation,
+                confidence=0.9,
+                format_hint="text",
+                citations=["merged_transcripts.csv"],
+            )
+
+        if "gpa" in q_lower:
+            if gpa_val is None:
+                explanation = (
+                    f"GPA details for {display_name}: GPA is not available in the transcript data."
+                )
+            else:
+                explanation = (
+                    f"GPA details for {display_name}: GPA = {gpa_val:.3f} "
+                    f"({gpa_source})."
+                )
+            return ToolResult(
+                data={"student": display_name, "gpa": gpa_val, "gpa_source": gpa_source},
+                explanation=explanation,
+                confidence=0.9,
+                format_hint="text",
+                citations=["merged_transcripts.csv"],
+            )
+
+        # Generic per-student academic information
+        if any(
+            key in q_lower
+            for key in [
+                "academic information",
+                "grades",
+                "performance",
+                "transcript",
+                "enrollment history",
+                "course completion",
+            ]
+        ):
+            # Basic stats per student
+            total_attempted = None
+            total_earned = None
+            hours_attempted_col = _find_col(df, "hours attempted")
+            hours_earned_col = _find_col(df, "hours earned")
+            if hours_attempted_col and hours_attempted_col in sdf.columns:
+                total_attempted = float(
+                    pd.to_numeric(sdf[hours_attempted_col], errors="coerce")
+                    .fillna(0)
+                    .sum()
+                )
+            if hours_earned_col and hours_earned_col in sdf.columns:
+                total_earned = float(
+                    pd.to_numeric(sdf[hours_earned_col], errors="coerce")
+                    .fillna(0)
+                    .sum()
+                )
+
+            explanation_parts = [
+                f"Academic information for {display_name}:",
+            ]
+            if gpa_val is not None:
+                explanation_parts.append(f"- GPA: {gpa_val:.3f} ({gpa_source})")
+            if total_attempted is not None:
+                explanation_parts.append(f"- Credit hours attempted: {total_attempted:.1f}")
+            if total_earned is not None:
+                explanation_parts.append(f"- Credit hours earned: {total_earned:.1f}")
+            if courses:
+                explanation_parts.append(f"- Courses taken: {len(courses)}")
+
+            explanation = "\n".join(explanation_parts)
+            return ToolResult(
+                data={
+                    "student": display_name,
+                    "gpa": gpa_val,
+                    "courses": courses,
+                    "hours_attempted": total_attempted,
+                    "hours_earned": total_earned,
+                },
+                explanation=explanation,
+                confidence=0.9,
+                format_hint="text",
+                citations=["merged_transcripts.csv"],
+            )
+
+        # Default per-student fallback if we reached here
+        explanation = f"Transcript records found for {display_name}."
         return ToolResult(
-            data={"student": row, "gpa": gpa_val},
+            data={"student": display_name, "rows": sdf.to_dict("records")},
+            explanation=explanation,
+            confidence=0.8,
+            format_hint="table",
+            citations=["merged_transcripts.csv"],
+        )
+
+    # ------------------------------------------------------------------
+    # Aggregate questions (no specific student_name extracted)
+    # ------------------------------------------------------------------
+
+    # Precompute per-student GPA table for aggregate queries
+    student_groups = df.groupby(name_col)
+
+    def build_student_gpa_df() -> pd.DataFrame:
+        records = []
+        for sname, sdf in student_groups:
+            g, src = _compute_student_gpa(sdf, gpa_col, qp_col, hrs_col)
+            records.append({"Student Name": sname, "GPA": g, "gpa_source": src})
+        return pd.DataFrame(records)
+
+    # Sort students in descending order of GPA
+    if "sort" in q_lower and "gpa" in q_lower and "descending" in q_lower:
+        sg = build_student_gpa_df()
+        sg = sg.dropna(subset=["GPA"]).sort_values("GPA", ascending=False)
+        explanation = (
+            "Students sorted in descending order of GPA (showing top 20):\n"
+            + sg.head(20)[["Student Name", "GPA"]].to_markdown(index=False)
+        )
+        return ToolResult(
+            data={"rows": sg.to_dict("records")},
+            explanation=explanation,
+            confidence=0.9,
+            format_hint="table",
+            citations=["merged_transcripts.csv"],
+        )
+
+    # Count students with GPA >= threshold
+    if "how many" in q_lower and "gpa" in q_lower and ">=" in q_lower:
+        # crude pattern: "gpa >= 4.2"
+        import re
+
+        m = re.search(r"gpa\s*>=\s*([0-9]+(\.[0-9]+)?)", q_lower)
+        threshold = None
+        if m:
+            threshold = float(m.group(1))
+        if threshold is not None:
+            sg = build_student_gpa_df()
+            mask = sg["GPA"].notna() & (sg["GPA"] >= threshold)
+            filtered = sg[mask]
+            count = len(filtered)
+            explanation = (
+                f"{count} students have GPA >= {threshold}."
+            )
+            return ToolResult(
+                data={"threshold": threshold, "count": count, "rows": filtered.to_dict("records")},
+                explanation=explanation,
+                confidence=0.9,
+                format_hint="table",
+                citations=["merged_transcripts.csv"],
+            )
+
+    # Average GPA of students (per student, then mean)
+    if "average gpa" in q_lower or "avg gpa" in q_lower:
+        sg = build_student_gpa_df()
+        valid = sg["GPA"].dropna()
+        if valid.empty:
+            explanation = "Average GPA cannot be computed because no numeric GPA values are available."
+            return ToolResult(
+                data={},
+                explanation=explanation,
+                confidence=0.5,
+                format_hint="text",
+                citations=["merged_transcripts.csv"],
+            )
+        avg_gpa = float(valid.mean())
+        explanation = f"The average GPA across students is {avg_gpa:.3f}."
+        return ToolResult(
+            data={"average_gpa": avg_gpa},
             explanation=explanation,
             confidence=0.9,
             format_hint="text",
             citations=["merged_transcripts.csv"],
         )
 
-    # Aggregate questions
-    q_lower = question.lower()
-
+    # Generic "how many students" (unique count)
     if "how many" in q_lower and "student" in q_lower:
         count = df[name_col].dropna().nunique()
         explanation = f"There are {count} unique students in the transcript data."
@@ -121,30 +398,9 @@ def answer(question: str, params: Dict[str, Any] | None = None) -> ToolResult:
             citations=["merged_transcripts.csv"],
         )
 
-    if "top" in q_lower and gpa_col:
-        try:
-            df_num = df.copy()
-            df_num[gpa_col] = pd.to_numeric(df_num[gpa_col], errors="coerce")
-            top = (
-                df_num.dropna(subset=[gpa_col])
-                .sort_values(gpa_col, ascending=False)
-            )
-            top = top[[name_col, gpa_col]].drop_duplicates(subset=[name_col]).head(5)
-            explanation = (
-                "**Top students by GPA:**\n"
-                + top.rename(columns={name_col: "Student Name", gpa_col: "GPA"}).to_markdown(index=False)
-            )
-            return ToolResult(
-                data={"rows": top.to_dict("records")},
-                explanation=explanation,
-                confidence=0.9,
-                format_hint="table",
-                citations=["merged_transcripts.csv"],
-            )
-        except Exception as e:
-            logger.warning(f"Top GPA computation failed: {e}")
-
+    # ------------------------------------------------------------------
     # Fallback → dataframe agent
+    # ------------------------------------------------------------------
     df_answer = run_df_agent(question, df, df_name="transcript records")
     return ToolResult(
         data={"raw": df_answer.get("raw")},

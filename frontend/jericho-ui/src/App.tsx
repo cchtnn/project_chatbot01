@@ -48,6 +48,14 @@ function App() {
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [uploadLoading, setUploadLoading] = useState(false)
 
+  // Admin console state
+  const [adminView, setAdminView] = useState<'chat' | 'admin'>('chat')
+  const [adminStats, setAdminStats] = useState<any | null>(null)
+  const [adminStatsLoading, setAdminStatsLoading] = useState(false)
+  const [adminTestQuery, setAdminTestQuery] = useState('')
+  const [adminTestResponse, setAdminTestResponse] = useState<any | null>(null)
+  const [adminTestLoading, setAdminTestLoading] = useState(false)
+
   // Auto-scroll anchor
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -93,6 +101,13 @@ function App() {
       loadSessions()
     }
   }, [screen])
+
+  // Load admin stats when switching into admin view
+  useEffect(() => {
+    if (screen === 'chat' && role === 'admin' && adminView === 'admin') {
+      loadAdminStats()
+    }
+  }, [screen, role, adminView])
 
   // ---------- SESSIONS + HISTORY ----------
 
@@ -363,6 +378,57 @@ function App() {
     }
   }
 
+  // ---------- ADMIN STATS + TEST QUERY ----------
+
+  const loadAdminStats = async () => {
+    setAdminStatsLoading(true)
+    try {
+      const resp = await fetch('http://localhost:8000/admin/stats', {
+        method: 'GET',
+        credentials: 'include',
+      })
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+      const data = await resp.json()
+      setAdminStats(data)
+    } catch (err) {
+      console.error(err)
+      setAdminStats(null)
+    } finally {
+      setAdminStatsLoading(false)
+    }
+  }
+
+  const handleAdminTestQuery = async () => {
+    const q = adminTestQuery.trim()
+    if (!q) return
+    setAdminTestLoading(true)
+    setAdminTestResponse(null)
+    try {
+      const resp = await fetch('http://localhost:8000/react-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: q,
+          sessionid: currentSessionId || 1,
+          private: false,
+        }),
+        credentials: 'include',
+      })
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+      const data = await resp.json()
+      setAdminTestResponse(data)
+    } catch (err) {
+      console.error(err)
+      setAdminTestResponse({ error: 'Request failed. Check logs.' })
+    } finally {
+      setAdminTestLoading(false)
+    }
+  }
+
   // ---------- LOGOUT ----------
 
   const handleLogout = async () => {
@@ -483,6 +549,21 @@ function App() {
             {sessionsLoading && <span className="text-[10px]">Loading…</span>}
           </div>
 
+          {role === 'admin' && (
+            <button
+              className={`w-full mb-3 mt-1 rounded-md text-sm font-semibold py-2 ${
+                adminView === 'admin'
+                  ? 'bg-slate-900 text-amber-200'
+                  : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
+              }`}
+              onClick={() =>
+                setAdminView(adminView === 'admin' ? 'chat' : 'admin')
+              }
+            >
+              {adminView === 'admin' ? 'Back to chat' : 'Admin console'}
+            </button>
+          )}
+
           <div className="flex-1 overflow-auto text-sm">
             {sessions.length === 0 && !sessionsLoading && (
               <div className="text-xs text-slate-400 px-1">
@@ -536,106 +617,207 @@ function App() {
         </aside>
 
         <section className="flex-1 flex flex-col">
-          <div className="flex-1 p-4 overflow-auto bg-slate-50">
-            <div className="max-w-3xl mx-auto space-y-3">
-              {messages.length === 0 && (
-                <div className="text-slate-500 text-sm">
-                  Start a conversation by asking a question about Diné College.
-                </div>
-              )}
+          {adminView === 'chat' || role !== 'admin' ? (
+            <>
+              {/* Chat view */}
+              <div className="flex-1 p-4 overflow-auto bg-slate-50">
+                <div className="max-w-3xl mx-auto space-y-3">
+                  {messages.length === 0 && (
+                    <div className="text-slate-500 text-sm">
+                      Start a conversation by asking a question about Diné
+                      College.
+                    </div>
+                  )}
 
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`flex ${
-                    m.role === 'user' ? 'justify-end' : 'justify-start'
-                  }`}
-                >
-                  <div
-                    className={`max-w-xl px-4 py-2 rounded-lg text-sm whitespace-pre-wrap shadow-sm ${
-                      m.role === 'user'
-                        ? 'bg-amber-500 text-slate-900'
-                        : 'bg-white text-slate-800'
-                    }`}
-                  >
-                    {m.content}
-                    {m.role === 'assistant' &&
-                      m.sources &&
-                      m.sources.length > 0 && (
-                        <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
-                          <div className="font-semibold mb-1">Sources</div>
-                          <ul className="list-disc pl-4 space-y-1">
-                            {m.sources
-                              .slice(0, 4)
-                              .map((s: any, idx: number) => (
-                                <li key={idx}>
-                                  {s.filename || s.title || 'Source'}{' '}
-                                  {s.page && <span>(p. {s.page})</span>}
-                                </li>
-                              ))}
-                          </ul>
-                          {typeof m.confidence === 'number' && (
-                            <div className="mt-1 text-[11px] text-slate-500">
-                              Confidence: {Math.round(m.confidence * 100)}%
+                  {messages.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`flex ${
+                        m.role === 'user' ? 'justify-end' : 'justify-start'
+                      }`}
+                    >
+                      <div
+                        className={`max-w-xl px-4 py-2 rounded-lg text-sm whitespace-pre-wrap shadow-sm ${
+                          m.role === 'user'
+                            ? 'bg-amber-500 text-slate-900'
+                            : 'bg-white text-slate-800'
+                        }`}
+                      >
+                        {m.content}
+                        {m.role === 'assistant' &&
+                          m.sources &&
+                          m.sources.length > 0 && (
+                            <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
+                              <div className="font-semibold mb-1">Sources</div>
+                              <ul className="list-disc pl-4 space-y-1">
+                                {m.sources
+                                  .slice(0, 4)
+                                  .map((s: any, idx: number) => (
+                                    <li key={idx}>
+                                      {s.filename || s.title || 'Source'}{' '}
+                                      {s.page && <span>(p. {s.page})</span>}
+                                    </li>
+                                  ))}
+                              </ul>
+                              {typeof m.confidence === 'number' && (
+                                <div className="mt-1 text-[11px] text-slate-500">
+                                  Confidence: {Math.round(m.confidence * 100)}%
+                                </div>
+                              )}
                             </div>
                           )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {loading && (
+                    <div className="flex justify-start">
+                      <div className="inline-flex items-center gap-3 px-4 py-2 rounded-lg bg-white text-xs text-slate-600 shadow-sm">
+                        <div className="flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-bounce"></span>
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-[bounce_1s_infinite_200ms]"></span>
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-200 animate-[bounce_1s_infinite_400ms]"></span>
                         </div>
+                        <span className="font-medium">
+                          Jericho is generating an answer…
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+
+              <div className="border-t bg-white p-3 flex items-center gap-2">
+                <button
+                  className="rounded-md border border-slate-300 text-sm px-3 py-2 text-slate-700 hover:bg-slate-100"
+                  onClick={() => {
+                    setShowUpload(true)
+                    setUploadFiles(null)
+                    setUploadStatus(null)
+                  }}
+                  disabled={!currentSessionId}
+                >
+                  Upload
+                </button>
+                <textarea
+                  className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  rows={1}
+                  placeholder={
+                    currentSessionId
+                      ? 'Ask a question about Diné College…'
+                      : 'Waiting for session…'
+                  }
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (!loading) handleSend()
+                    }
+                  }}
+                  disabled={!currentSessionId}
+                />
+                <button
+                  className="rounded-md bg-amber-500 hover:bg-amber-400 text-sm font-semibold px-4 py-2 text-slate-900 disabled:opacity-60"
+                  disabled={loading || !input.trim() || !currentSessionId}
+                  onClick={handleSend}
+                >
+                  {loading ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </>
+          ) : (
+            // ADMIN VIEW
+            <div className="flex-1 p-4 overflow-auto bg-slate-50">
+              <div className="max-w-4xl mx-auto space-y-4">
+                <h2 className="text-lg font-semibold text-slate-800">
+                  Admin console
+                </h2>
+
+                {/* Stats card */}
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-slate-800">
+                      RAG / documents stats
+                    </h3>
+                    <button
+                      className="text-xs px-2 py-1 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100"
+                      onClick={loadAdminStats}
+                      disabled={adminStatsLoading}
+                    >
+                      {adminStatsLoading ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                  </div>
+                  {adminStatsLoading && (
+                    <div className="text-xs text-slate-500">
+                      Loading stats...
+                    </div>
+                  )}
+                  {!adminStatsLoading && adminStats && (
+                    <div className="text-sm text-slate-700">
+                      <div>
+                        <span className="font-medium">Total documents: </span>
+                        {adminStats.documents?.total ?? 'N/A'}
+                      </div>
+                      {adminStats.documents?.by_type && (
+                        <ul className="mt-1 text-xs text-slate-600 list-disc pl-4">
+                          {Object.entries(
+                            adminStats.documents.by_type as Record<
+                              string,
+                              number
+                            >
+                          ).map(([ext, count]) => (
+                            <li key={ext}>
+                              {ext}: {count}
+                            </li>
+                          ))}
+                        </ul>
                       )}
-                  </div>
+                    </div>
+                  )}
+                  {!adminStatsLoading && !adminStats && (
+                    <div className="text-xs text-slate-500">
+                      No stats available or failed to load.
+                    </div>
+                  )}
                 </div>
-              ))}
 
-              {loading && (
-                <div className="flex justify-start">
-                  <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white text-xs text-slate-500 shadow-sm">
-                    <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-bounce"></span>
-                    <span>Jericho is generating an answer…</span>
+                {/* Test query card */}
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <h3 className="text-sm font-semibold text-slate-800 mb-2">
+                    Orchestrator test query
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-2">
+                    Send a test question and inspect tools_used, confidence, and
+                    sources.
+                  </p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="text"
+                      className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      placeholder="E.g. What is the check date for Pay period 3"
+                      value={adminTestQuery}
+                      onChange={(e) => setAdminTestQuery(e.target.value)}
+                    />
+                    <button
+                      className="rounded-md bg-amber-500 hover:bg-amber-400 text-xs font-semibold px-3 py-2 text-slate-900 disabled:opacity-60"
+                      disabled={adminTestLoading || !adminTestQuery.trim()}
+                      onClick={handleAdminTestQuery}
+                    >
+                      {adminTestLoading ? 'Running...' : 'Run'}
+                    </button>
                   </div>
+                  {adminTestResponse && (
+                    <pre className="mt-2 text-xs bg-slate-900 text-emerald-100 rounded-md p-3 overflow-auto max-h-64">
+                      {JSON.stringify(adminTestResponse, null, 2)}
+                    </pre>
+                  )}
                 </div>
-              )}
-
-              <div ref={messagesEndRef} />
+              </div>
             </div>
-          </div>
-
-          <div className="border-t bg-white p-3 flex items-center gap-2">
-            <button
-              className="rounded-md border border-slate-300 text-sm px-3 py-2 text-slate-700 hover:bg-slate-100"
-              onClick={() => {
-                setShowUpload(true)
-                setUploadFiles(null)
-                setUploadStatus(null)
-              }}
-              disabled={!currentSessionId}
-            >
-              Upload
-            </button>
-            <textarea
-              className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-              rows={1}
-              placeholder={
-                currentSessionId
-                  ? 'Ask a question about Diné College…'
-                  : 'Waiting for session…'
-              }
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  if (!loading) handleSend()
-                }
-              }}
-              disabled={!currentSessionId}
-            />
-            <button
-              className="rounded-md bg-amber-500 hover:bg-amber-400 text-sm font-semibold px-4 py-2 text-slate-900 disabled:opacity-60"
-              disabled={loading || !input.trim() || !currentSessionId}
-              onClick={handleSend}
-            >
-              {loading ? 'Sending...' : 'Send'}
-            </button>
-          </div>
+          )}
         </section>
       </main>
 

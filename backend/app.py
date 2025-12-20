@@ -40,6 +40,10 @@ app = FastAPI(
 
 app.include_router(auth_router, prefix="/apiv1", tags=["auth"])
 
+from api import admin_routes
+
+app.include_router(admin_routes.router)
+
 # --- CORS ---
 app.add_middleware(
     CORSMiddleware,
