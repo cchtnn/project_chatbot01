@@ -98,6 +98,11 @@ pdf2image>=1.17.0
 
 passlib[bcrypt]
 PyJWT
+tabula
+easyocr
+langchain_groq
+langchain_experimental
+
 
 
 

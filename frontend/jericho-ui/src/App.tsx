@@ -679,7 +679,7 @@ function App() {
                           <span className="h-1.5 w-1.5 rounded-full bg-amber-200 animate-[bounce_1s_infinite_400ms]"></span>
                         </div>
                         <span className="font-medium">
-                          Jericho is generating an answer…
+                          Jericho is generating an answer...
                         </span>
                       </div>
                     </div>
