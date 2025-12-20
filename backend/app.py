@@ -25,6 +25,9 @@ sys.path.insert(0, str(BASE_DIR))
 from core import init_logger  # uses your existing core/__init__.py
 init_logger()
 
+from db import session_db
+session_db.init_db()
+
 # --- ROUTERS ---
 from api.routes import router as api_router
 from api.health import router as health_router
@@ -59,8 +62,10 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 # --- API ROUTERS ---
 
-# a) JSON API under /api/v1/...
-app.include_router(api_router, prefix="/api/v1")
+# # a) JSON API under /api/v1/...
+# app.include_router(api_router, prefix="/api/v1")
+# app.include_router(health_router, prefix="/api/v1")
+
 app.include_router(health_router, prefix="/api/v1")
 
 # b) UI-compatible endpoints with NO prefix

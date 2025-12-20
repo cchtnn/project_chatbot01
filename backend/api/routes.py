@@ -7,7 +7,7 @@ Jericho API routes
 
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict
+from typing import List
 
 from fastapi import (
     APIRouter,
@@ -16,13 +16,17 @@ from fastapi import (
     File,
     HTTPException,
     Depends,
+    Response,
 )
 from pydantic import BaseModel
-from api.deps import get_current_user
 
+from api.deps import get_current_user
 from core import get_logger
 from services.rag_pipeline import RAGPipeline
 from core.retrieval import get_hybrid_retriever
+from db import session_db  # NEW: DB-backed sessions/history
+
+from services.orchestrator import Orchestrator, OrchestratorRequest
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -32,11 +36,15 @@ router = APIRouter()
 rag_pipeline = RAGPipeline()
 hybrid_retriever = get_hybrid_retriever()
 
-# ---------- SIMPLE RAG API (TESTED) ----------
+# Global singleton orchestrator
+orchestrator = Orchestrator()
+
+# ---------- SIMPLE RAG API (TEST / DEBUG) ----------
 
 class SimpleQueryRequest(BaseModel):
     query: str
     session_id: int = 1
+
 
 @router.get("/query_simple")
 async def query_simple(query: str, session_id: int = 1):
@@ -47,7 +55,6 @@ async def query_simple(query: str, session_id: int = 1):
     try:
         logger.info(f"[query_simple] q='{query}' session={session_id}")
 
-        # Use unified RAG pipeline (multi-modal) instead of manual prompt
         result = rag_pipeline.query(question=query, top_k=5)
         answer = result.get("answer", "")
         sources = result.get("sources", [])
@@ -67,145 +74,142 @@ async def query_simple(query: str, session_id: int = 1):
         logger.error(f"[query_simple] error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-# ---------- IN-MEMORY SESSION STORE (UI STUB) ----------
 
-# For now, keep sessions in memory.
-# Later this can be replaced with a DB-backed implementation similar to GitHub main.py.
-_sessions: Dict[int, Dict] = {}
-_next_session_id = 1
-
-def _get_or_create_session(session_id: int) -> Dict:
-    global _next_session_id
-    if session_id in _sessions:
-        return _sessions[session_id]
-    session = {
-        "session_id": session_id,
-        "session_name": "New Chat",
-        "created_at": datetime.utcnow().isoformat(),
-        "messages": [],
-    }
-    _sessions[session_id] = session
-    _next_session_id = max(_next_session_id, session_id + 1)
-    return session
-
-# ---------- UI-COMPATIBLE ENDPOINTS ----------
+# ---------- UI-COMPATIBLE SESSION ENDPOINTS (DB-BACKED) ----------
 
 @router.post("/new_session")
-async def new_session():
+async def new_session(user=Depends(get_current_user)):
     """
-    Create a new chat session.
+    Create a new chat session for the current user.
 
-    Matches JS usage in chat.html:
+    JS usage in chat.html:
     - POST /new_session
     - Returns: {"session_id": int}
     """
-    global _next_session_id
-    session_id = _next_session_id
-    _next_session_id += 1
-
-    _sessions[session_id] = {
-        "session_id": session_id,
-        "session_name": "New Chat",
-        "created_at": datetime.utcnow().isoformat(),
-        "messages": [],
-    }
-    logger.info(f"[new_session] created session_id={session_id}")
+    username = getattr(user, "username", "guest")
+    session_id = session_db.create_session(username=username)
+    logger.info(f"[new_session] user={username} session_id={session_id}")
     return {"session_id": session_id}
 
+
 @router.get("/user_sessions")
-async def user_sessions():
+async def user_sessions(user=Depends(get_current_user)):
     """
     Return list of sessions for current user.
 
-    GitHub main.py scopes by username; for now we return all sessions:
     - GET /user_sessions
     - Returns: {"sessions": [{session_id, session_name}, ...]}
     """
-    sessions = [
-        {
-            "session_id": s["session_id"],
-            "session_name": s.get("session_name", "New Chat"),
-        }
-        for s in _sessions.values()
-    ]
+    username = getattr(user, "username", "guest")
+    sessions = session_db.list_sessions_for_user(username=username)
     return {"sessions": sessions}
 
+
 @router.get("/history")
-async def history(session_id: int):
+async def history(session_id: int, user=Depends(get_current_user)):
     """
     Return Q&A history for a session.
 
     JS calls: GET /history?session_id=...
     Response: {"history": [{"question": "...", "answer": "..."}, ...]}
     """
-    session = _sessions.get(session_id)
-    if not session:
-        return {"history": []}
+    # (Optional) ownership check can be added later
+    records = session_db.get_history(session_id)
+    return {
+        "history": [
+            {"question": q, "answer": a}
+            for (q, a) in records
+        ]
+    }
 
-    history = [
-        {"question": m["question"], "answer": m["answer"]}
-        for m in session["messages"]
-    ]
-    return {"history": history}
 
 @router.post("/rename_session")
-async def rename_session(session_id: int = Form(...), new_name: str = Form(...)):
+async def rename_session(
+    session_id: int = Form(...),
+    new_name: str = Form(...),
+    user=Depends(get_current_user),
+):
     """
     Rename a session (used by rename modal in chat.html).
     """
-    session = _sessions.get(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    session["session_name"] = new_name.strip() or "New Chat"
-    logger.info(f"[rename_session] session_id={session_id} new_name='{session['session_name']}'")
+    new_name_clean = new_name.strip() or "New Chat"
+    session_db.rename_session(session_id, new_name_clean)
+    logger.info(f"[rename_session] session_id={session_id} new_name='{new_name_clean}'")
     return {"success": True}
 
+
 @router.post("/delete_session")
-async def delete_session(session_id: int = Form(...)):
+async def delete_session(
+    session_id: int = Form(...),
+    user=Depends(get_current_user),
+):
     """
     Delete a session (used by delete option in chat sidebar).
     """
-    if session_id in _sessions:
-        del _sessions[session_id]
-        logger.info(f"[delete_session] deleted session_id={session_id}")
+    session_db.delete_session(session_id)
+    logger.info(f"[delete_session] deleted session_id={session_id}")
     return {"success": True}
 
-# ---------- CORE RAG /query USED BY UI ----------
 
-from services.orchestrator import Orchestrator, OrchestratorRequest
-
-# Global singleton
-orchestrator = Orchestrator()
+# ---------- CORE RAG /query USED BY UI (WITH HISTORY) ----------
 
 @router.post("/query")
 async def query_endpoint(
     query: str = Form(...),
     session_id: int = Form(...),
     private: bool = Form(False),
+    user=Depends(get_current_user),
 ):
-    # Your existing auth/session logic stays EXACTLY the same
-    # username = get_username_from_token(request)
-    # if not username:
-    #     raise HTTPException(status_code=401, detail="Unauthorized")
+    """
+    Main chat endpoint used by chat.html JS.
 
-    username = "test_user"
-    
-    # NEW: Delegate to orchestrator
-    request = OrchestratorRequest(query=query)
-    response = orchestrator.handle_query(request)
-    
-    # Save to session history (your existing logic)
-    # session_db.add_single_qa_to_history(session_id, query, response.answer)
-    
-    # Return orchestrator response in your existing format
-    return {
-        "answer": response.answer,
-        "session_id": session_id,
-        "sources": response.sources,
-        "tools_used": response.tools_used,
-        "confidence": response.confidence
-    }
+    Frontend sends FormData:
+      - query
+      - session_id
+      - private
+
+    Response is expected to contain:
+      - answer
+      - session_id
+      - sources
+      - tools_used
+      - confidence
+      - sessionnameupdated (bool)  <-- name chosen to match old UI
+    """
+    username = getattr(user, "username", "test_user")
+    logger.info(f"[query] user={username} q={query!r} session_id={session_id} private={private}")
+
+    try:
+        # Delegate to orchestrator
+        request = OrchestratorRequest(query=query)
+        response = orchestrator.handle_query(request)
+        answer_text = response.answer
+
+        # Persist message in DB
+        before_count = session_db.count_messages(session_id)
+        session_db.add_message(session_id=session_id, question=query, answer=answer_text)
+
+        # Auto-rename session on first question (similar to old logic)
+        sessionnameupdated = False
+        if before_count == 0:
+            words = query.strip().split()
+            base = " ".join(words[:6]) if words else "New Chat"
+            nice_name = base[:40].rstrip()
+            session_db.rename_session(session_id, nice_name)
+            sessionnameupdated = True
+
+        return {
+            "answer": answer_text,
+            "session_id": session_id,
+            "sources": response.sources,
+            "tools_used": response.tools_used,
+            "confidence": response.confidence,
+            "sessionnameupdated": sessionnameupdated,
+        }
+    except Exception as e:
+        logger.error(f"[query] error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error while answering query")
+
 
 # ---------- FILE UPLOAD (USED BY UI) ----------
 
@@ -228,8 +232,10 @@ async def upload_endpoint(
     """
     try:
         logger.info(
-    f"[upload] user={getattr(user, 'username', '?')} session_id={session_id} private={private} files={[f.filename for f in files]}"
-)
+            f"[upload] user={getattr(user, 'username', '?')} "
+            f"session_id={session_id} private={private} "
+            f"files={[f.filename for f in files]}"
+        )
 
         base_dir = Path("data/documents")
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -254,16 +260,8 @@ async def upload_endpoint(
         logger.error(f"[upload] error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Upload/ingest failed")
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 
-from services.rag_pipeline import RAGPipeline
-from core.retrieval import get_hybrid_retriever  # adjust name if needed
-
-
-ragpipeline = RAGPipeline()
-hybridretriever = get_hybrid_retriever()
-
+# ---------- REACT-FACING QUERY (ORCHESTRATOR) ----------
 
 class ReactChatRequest(BaseModel):
     query: str
@@ -279,42 +277,71 @@ async def react_query(
     """
     React-facing query endpoint.
 
-    Uses the Orchestrator so queries are routed to the right domain tool:
-    - Transcript, Payroll, BOR, or generic Policy RAG.
+    Uses the Orchestrator so queries are routed to the right domain tool,
+    and persists Q&A into session_db keyed by sessionid.
     """
     try:
+        username = getattr(user, "username", "admin")
         logger.info(
-            f"[react-query] user={getattr(user, 'username', '?')} q={req.query!r} session={req.sessionid}"
+            f"[react-query] user={username} q={req.query!r} session={req.sessionid}"
         )
 
-        # Build orchestrator request
+        # Orchestrator call
         orch_request = OrchestratorRequest(query=req.query)
         orch_response = orchestrator.handle_query(orch_request)
+        answer_text = orch_response.answer
 
-        # OrchestratorResponse fields (from your orchestrator module):
-        # - answer: str
-        # - tools_used: List[str]
-        # - confidence: float
-        # - sources: Optional[...]  (depending on your implementation)
+        # Persist message in DB for this session
+        before_count = session_db.count_messages(req.sessionid)
+        session_db.add_message(
+            session_id=req.sessionid,
+            question=req.query,
+            answer=answer_text,
+        )
+
+        # Auto-rename session on first question
+        sessionnameupdated = False
+        if before_count == 0:
+            words = req.query.strip().split()
+            base = " ".join(words[:6]) if words else "New Chat"
+            nice_name = base[:40].rstrip()
+            session_db.rename_session(req.sessionid, nice_name)
+            sessionnameupdated = True
 
         return {
-            "answer": orch_response.answer,
+            "answer": answer_text,
             "sessionid": req.sessionid,
             "tools_used": orch_response.tools_used,
             "confidence": orch_response.confidence,
             "sources": orch_response.sources,
+            "sessionnameupdated": sessionnameupdated,
         }
     except Exception as e:
         logger.error(f"[react-query] orchestrator error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Query failed")
 
-from fastapi import Response
+# ---------- LOGOUT ----------
 
 @router.post("/logout")
 async def logout(response: Response):
-    # Adjust cookie name if your token cookie is named differently
+    # Adjust cookie names if different
     response.delete_cookie("access_token")
-    # You can also delete refresh token etc. if you use them
     return {"success": True}
 
+@router.post("/feedback")
+async def submit_feedback(
+    message_id: int = Form(...),
+    rating: str = Form(...),
+    session_id: int = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    """Submit user feedback (like/dislike) for answer"""
+    username = getattr(user, 'username', 'guest')
+    try:
+        session_db.add_feedback(message_id, session_id, username, rating)
+        logger.info(f"Feedback: {username} rated message {message_id} as {rating}")
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Feedback error: {e}")
+        raise HTTPException(status_code=500, detail="Feedback failed")
 
