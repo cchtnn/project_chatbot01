@@ -58,7 +58,7 @@ class HybridRetriever:
         fused_results = self._reciprocal_rank_fusion(vector_results, bm25_results)
         final_results = self._rerank(query, fused_results, top_k)  # Respect top_k param
         
-        logger.info(f"[Retriever] query='{query[:50]}...' --> {len(vector_results)} vector + {len(bm25_results)} bm25 → {len(final_results)} final")
+        logger.info(f"[Retriever] query='{query[:50]}...' --> {len(vector_results)} vector + {len(bm25_results)} bm25 --> {len(final_results)} final")
         
         return final_results
 
