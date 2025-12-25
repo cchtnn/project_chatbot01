@@ -145,7 +145,7 @@ class Settings(BaseSettings):
 
     enable_ocr: bool = Field(default=True, env="ENABLE_OCR")
     ocr_language: str = Field(default="eng", env="OCR_LANGUAGE")
-
+    
     # ========================================================================
     # VALIDATION
     # ========================================================================

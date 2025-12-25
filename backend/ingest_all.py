@@ -16,7 +16,7 @@ from services.rag_pipeline import RAGPipeline  # note: ragpipeline, no underscor
 
 
 def main():
-    docs_root = Path(r"D:\jericho\data\documents")
+    docs_root = Path(r"C:\chtn\gen_ai\hitesh\jericho\project_chatbot01\data")
     paths = [str(p) for p in docs_root.rglob("*") if p.is_file()]
     logger.info(f"Found {len(paths)} files to ingest under {docs_root}")
 

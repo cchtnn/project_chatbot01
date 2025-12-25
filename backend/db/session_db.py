@@ -126,7 +126,7 @@ def get_history(session_id: int) -> List[Tuple[str, str]]:
         msgs = (
             db.query(ChatMessage)
             .filter(ChatMessage.session_id == session_id)
-            .order_by(ChatMessage.created_at.asc())
+            .order_by(ChatMessage.createdat.asc())
             .all()
         )
         return [(m.question, m.answer) for m in msgs]

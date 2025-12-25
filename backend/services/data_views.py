@@ -1,13 +1,14 @@
 from pathlib import Path
 import pandas as pd
 from core import get_logger
+from pathlib import Path
 
 logger = get_logger(__name__)
 _cache: dict[str, pd.DataFrame] = {}
 
 # backend/ directory
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-# project root: D:\jericho
+
 PROJECT_ROOT = BACKEND_ROOT.parent
 
 
@@ -15,7 +16,7 @@ def get_transcript_df() -> pd.DataFrame:
     if "transcripts" in _cache:
         return _cache["transcripts"]
 
-    path = PROJECT_ROOT / "data" / "documents" / "csv" / "merged_transcripts.csv"
+    path = BACKEND_ROOT / "data" / "documents" / "transcripts" / "merged_transcripts.csv"
     if not path.exists():
         logger.warning(f"No merged transcripts found at {path}")
         _cache["transcripts"] = pd.DataFrame()
@@ -83,4 +84,18 @@ def get_bor_schedule_df() -> pd.DataFrame:
     logger.info("BOR JSON normalized shape=%s cols=%s", df.shape, list(df.columns))
     _cache["bor"] = df
     return df
+
+def get_transcript_csv_path() -> str:
+    """Get the path to the transcript CSV file."""
+    # Adjust this path based on your project structure
+    base_dir = Path(__file__).resolve().parent.parent
+    csv_path = base_dir / "data" / "documents" / "transcripts" / "merged_transcripts.csv"
+    
+    # Alternative: Check if path is in settings
+    from config import get_settings
+    settings = get_settings()
+    if hasattr(settings, 'TRANSCRIPT_CSV_PATH'):
+        return settings.TRANSCRIPT_CSV_PATH
+    
+    return str(csv_path)
 

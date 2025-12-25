@@ -1,0 +1,412 @@
+"""
+Student Query Reformulator for Diné College Assistant
+Reformulates student transcript queries to improve CSV agent performance
+Integrates with existing StudentTranscriptCSVHandler
+"""
+
+import os
+import pandas as pd
+from langchain_groq import ChatGroq
+from langchain_core.messages import HumanMessage, SystemMessage
+from typing import Dict, Any
+import json
+import warnings
+from dotenv import load_dotenv
+import logging
+import re
+logging.getLogger("watchdog").setLevel(logging.ERROR)
+
+warnings.filterwarnings("ignore")
+load_dotenv()
+
+
+class StudentQueryReformulator:
+    """Reformulates student transcript queries for better CSV agent performance"""
+    
+    def __init__(self, groq_api_key: str = None, model_name: str = "llama-3.1-8b-instant"):
+        self.groq_api_key = groq_api_key or os.getenv('GROQ_API_KEY')
+        self.model_name = model_name
+        self.llm = None
+        self.csv_structure = None
+        self._setup_llm()
+        
+    def _setup_llm(self):
+        """Setup the ChatGroq LLM for query reformulation"""
+        try:
+            self.llm = ChatGroq(
+                groq_api_key=self.groq_api_key,
+                model_name=self.model_name,
+                temperature=0,
+                max_tokens=2048,
+                streaming=False,
+                request_timeout=30
+            )
+            print("✅ Query Reformulator LLM setup completed")
+        except Exception as e:
+            raise Exception(f"Error initializing Query Reformulator LLM: {str(e)}")
+    
+    def analyze_csv_structure(self, csv_path: str) -> Dict[str, Any]:
+        """
+        Analyze CSV structure to understand columns, data types, and sample values
+        """
+        try:
+            df = pd.read_csv(csv_path)
+            
+            structure = {
+                "columns": list(df.columns),
+                "dtypes": {col: str(dtype) for col, dtype in df.dtypes.to_dict().items()},
+                "sample_values": {},
+                "row_count": len(df),
+                "unique_values_count": {}
+            }
+            
+            # Get sample values for each column (first 5 non-null unique values)
+            for col in df.columns:
+                non_null_values = df[col].dropna().unique()[:5]
+                structure["sample_values"][col] = [str(val) for val in non_null_values]
+                structure["unique_values_count"][col] = df[col].nunique()
+            
+            self.csv_structure = structure
+            print(f"📊 CSV structure analyzed: {len(structure['columns'])} columns, {structure['row_count']} rows")
+            return structure
+            
+        except Exception as e:
+            print(f"❌ Error analyzing CSV structure: {str(e)}")
+            return None
+    
+    def _detect_ranking_query(self, user_query: str) -> Dict[str, Any]:
+        """
+        Detect if query is asking for specific ranking/position (1st, 2nd, 3rd, etc.)
+        Returns dict with ranking info if detected, None otherwise
+        """
+        query_lower = user_query.lower()
+        
+        # Patterns for ranking queries
+        ranking_patterns = [
+            (r'\b(\d+)(?:st|nd|rd|th)\s+(?:highest|lowest|best|worst|top|bottom)', 'position'),
+            (r'\b(first|second|third|fourth|fifth|top|bottom)\s+(?:highest|lowest|best|worst)', 'word'),
+            (r'\btop\s+(\d+)', 'top_n'),
+            (r'\bbottom\s+(\d+)', 'bottom_n'),
+        ]
+        
+        for pattern, pattern_type in ranking_patterns:
+            match = re.search(pattern, query_lower)
+            if match:
+                position_str = match.group(1)
+                
+                # Convert words to numbers
+                word_to_num = {
+                    'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5,
+                    'top': 1, 'bottom': 1
+                }
+                
+                if pattern_type == 'position':
+                    position = int(position_str)
+                    is_ascending = 'lowest' in query_lower or 'worst' in query_lower or 'bottom' in query_lower
+                elif pattern_type == 'word':
+                    position = word_to_num.get(position_str, 1)
+                    is_ascending = 'lowest' in query_lower or 'worst' in query_lower or 'bottom' in query_lower
+                elif pattern_type == 'top_n':
+                    position = int(position_str)
+                    is_ascending = False
+                elif pattern_type == 'bottom_n':
+                    position = int(position_str)
+                    is_ascending = True
+                
+                return {
+                    'has_ranking': True,
+                    'position': position,
+                    'is_ascending': is_ascending,
+                    'original_match': match.group(0)
+                }
+        
+        return {'has_ranking': False}
+    
+    def create_reformulation_prompt(self, csv_structure: Dict[str, Any]) -> str:
+        """
+        Create a detailed prompt for query reformulation based on CSV structure
+        """
+        columns_info = []
+        for col in csv_structure["columns"]:
+            dtype = csv_structure["dtypes"][col]
+            samples = csv_structure["sample_values"][col]
+            unique_count = csv_structure["unique_values_count"][col]
+            columns_info.append(f"- '{col}' ({dtype}, {unique_count} unique values): Examples: {samples}")
+        
+        prompt = f"""
+You are an expert query reformulator for student transcript CSV data analysis. Your task is to convert natural language questions into precise, structured queries that a CSV agent can understand and execute accurately.
+
+STUDENT TRANSCRIPT CSV STRUCTURE:
+Total rows: {csv_structure["row_count"]}
+Available columns:
+{chr(10).join(columns_info)}
+
+REFORMULATION RULES:
+1. Always use EXACT column names as they appear in the CSV (case-sensitive, including spaces)
+2. Be specific about column references - use phrases like "from the 'Column Name' column"
+3. Convert vague terms to specific column references based on available columns
+4. Maintain the original intent while being more explicit
+5. For filtering, be specific about column names and use exact values when possible
+6. For aggregations, clearly specify the column to aggregate and the operation
+7. Use proper pandas/SQL-like syntax concepts that the CSV agent can understand
+8. When looking for students, always reference the student name column specifically
+9. When looking for courses, reference course-related columns specifically
+10. When looking for grades, reference grade-related columns specifically
+11. CRITICAL: For ranking queries (1st, 2nd, 3rd, nth highest/lowest), preserve the exact position requirement
+12. For ranking queries, use explicit instructions like "get the row at index N-1 after sorting"
+
+COMMON QUERY PATTERNS:
+- "student who studies at X" → "student name from the 'Student Name' column where the 'College Name' or 'Organization Name' column equals 'X'"
+- "courses for student X" → "course information from relevant course columns where 'Student Name' column equals 'X'"
+- "students with grade X" → "student names from 'Student Name' column where grade column equals 'X'"
+- "GPA information" → "GPA values from 'GPA' column for specified conditions"
+- "2nd highest GPA" → "calculate mean GPA for each student from 'Student Name' and 'GPA' columns, sort in descending order by GPA, then get the row at index 1 (second position)"
+- "top 3 students by GPA" → "calculate mean GPA for each student from 'Student Name' and 'GPA' columns, sort in descending order by GPA, then get the first 3 rows"
+
+EXAMPLES:
+Original: "Tell me the student who is studying in college xyz"
+Reformulated: "Show me the student name from the 'Student Name' column where the 'College Name' column equals 'xyz'"
+
+Original: "Name of student where organization is NEWMAN UNIVERSITY"
+Reformulated: "Give me the unique student names from the 'Student Name' column where the 'Organization Name' or 'College Name' column equals 'NEWMAN UNIVERSITY'"
+
+Original: "What courses did John take?"
+Reformulated: "Show me all course information from course-related columns where the 'Student Name' column equals 'John'"
+
+Original: "2nd highest GPA student"
+Reformulated: "calculate mean GPA for each student from 'Student Name' and 'GPA' columns, sort in descending order by GPA value, then select the row at index 1 to get the 2nd highest"
+
+Original: "student with 3rd lowest GPA"
+Reformulated: "calculate mean GPA for each student from 'Student Name' and 'GPA' columns, sort in ascending order by GPA value, then select the row at index 2 to get the 3rd lowest"
+
+Now reformulate the following user query to be more specific and actionable for the CSV agent:
+"""
+        return prompt
+    
+    def _reformulate_query(self, user_query: str, csv_structure: Dict[str, Any] = None) -> str:
+        """
+        Reformulate user query to be more specific for CSV agent
+        """
+        if csv_structure is None:
+            csv_structure = self.csv_structure
+            
+        if csv_structure is None:
+            print("⚠️ No CSV structure available, returning original query")
+            return user_query
+        
+        try:
+            # Check if this is a ranking query
+            ranking_info = self._detect_ranking_query(user_query)
+            
+            # Enhanced prompt if ranking detected
+            if ranking_info.get('has_ranking'):
+                position = ranking_info['position']
+                is_ascending = ranking_info['is_ascending']
+                order = "ascending" if is_ascending else "descending"
+                
+                print(f"🎯 Detected ranking query: Position {position}, Order: {order}")
+                
+                # Add specific context for ranking queries
+                ranking_context = f"""
+IMPORTANT: This query asks for the {position}{'st' if position == 1 else 'nd' if position == 2 else 'rd' if position == 3 else 'th'} {'lowest' if is_ascending else 'highest'} value.
+You MUST preserve this exact position requirement in the reformulation.
+Use: "sort in {order} order, then select the row at index {position-1}" to get the exact position.
+"""
+            else:
+                ranking_context = ""
+            
+            system_prompt = self.create_reformulation_prompt(csv_structure) + ranking_context
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=f"User Query: {user_query}\n\nProvide only the reformulated query, no explanations or prefixes.")
+            ]
+            response = self.llm.invoke(messages)
+            print(f"🔄 LLM reformulator raw response: {response.content}")
+            reformulated_query = response.content.strip()
+            
+            # Try to parse as JSON if it looks like JSON
+            if reformulated_query.startswith("{") and reformulated_query.endswith("}"):
+                try:
+                    data = json.loads(reformulated_query)
+                    if "reformulated_query" in data:
+                        reformulated_query = data["reformulated_query"]
+                except json.JSONDecodeError as json_e:
+                    print(f"⚠️ Could not parse reformulator response as JSON: {json_e}")
+            
+            # Clean up any prefixes that might be added
+            prefixes_to_remove = ["Reformulated:", "Reformulated Query:", "Query:", "Answer:", "Response:"]
+            for prefix in prefixes_to_remove:
+                if reformulated_query.startswith(prefix):
+                    reformulated_query = reformulated_query.replace(prefix, "").strip()
+            
+            print(f"🔄 Query reformulated:")
+            print(f"   Original: {user_query}")
+            print(f"   Reformulated: {reformulated_query}")
+            
+            return reformulated_query
+            
+        except Exception as e:
+            print(f"❌ Error reformulating query: {str(e)}")
+            print(f"   Error type: {type(e).__name__}")
+            print(f"   Returning original query: {user_query}")
+            import traceback
+            traceback.print_exc()
+            return user_query
+    
+    def validate_query_feasibility(self, user_query: str, csv_structure: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Validate if the query can be answered with available columns and suggest alternatives
+        """
+        if csv_structure is None:
+            csv_structure = self.csv_structure
+            
+        if csv_structure is None:
+            return {"can_answer": True, "confidence": "unknown", "message": "No structure analysis available"}
+        
+        try:
+            validation_prompt = f"""
+Analyze if the following student transcript query can be answered using the available CSV columns.
+
+AVAILABLE COLUMNS: {', '.join(csv_structure['columns'])}
+SAMPLE DATA: {json.dumps(csv_structure['sample_values'], indent=2)}
+
+USER QUERY: {user_query}
+
+Respond with a JSON object containing:
+{{
+    "can_answer": true/false,
+    "confidence": "high"/"medium"/"low",
+    "required_columns": ["list", "of", "columns", "needed"],
+    "missing_info": "what information is missing if any",
+    "suggestions": ["alternative queries that can be answered"]
+}}
+"""
+            
+            messages = [
+                SystemMessage(content=validation_prompt),
+                HumanMessage(content="Analyze the query feasibility and respond with JSON only:")
+            ]
+            
+            response = self.llm.invoke(messages)
+            
+            # Try to parse JSON response
+            try:
+                validation_result = json.loads(response.content)
+                return validation_result
+            except json.JSONDecodeError:
+                # Fallback to simple validation
+                return {
+                    "can_answer": True, 
+                    "confidence": "medium", 
+                    "message": "Could not parse validation response",
+                    "validation_text": response.content
+                }
+                
+        except Exception as e:
+            print(f"❌ Error validating query: {str(e)}")
+            return {"can_answer": True, "confidence": "unknown", "error": str(e)}
+    
+    def process_student_query(self, user_query: str, csv_path: str = None) -> Dict[str, Any]:
+        """
+        Complete pipeline: analyze CSV (if needed), validate, and reformulate query
+
+        Args:
+            user_query (str): Original user query
+            csv_path (str, optional): Path to CSV file for structure analysis
+
+        Returns:
+            Dict containing reformulated query and metadata
+        """
+        result = {
+            "original_query": user_query,
+            "reformulated_query": user_query,
+            "success": True,
+            "validation": None,
+            "csv_structure_available": False
+        }
+
+        try:
+            # Analyze CSV structure if path provided and not already analyzed
+            if csv_path and self.csv_structure is None:
+                structure = self.analyze_csv_structure(csv_path)
+                if structure:
+                    result["csv_structure_available"] = True
+            elif self.csv_structure:
+                result["csv_structure_available"] = True
+
+            # Skip validation and reformulation if LLM is not available
+            if self.llm is None:
+                print("⚠️ LLM not available, skipping query reformulation")
+                result["message"] = "Query reformulation skipped - LLM not available"
+                return result
+
+            # Validate query feasibility if structure is available
+            if self.csv_structure:
+                try:
+                    validation = self.validate_query_feasibility(user_query)
+                    result["validation"] = validation
+
+                    # If confidence is very low, provide feedback
+                    if validation.get("confidence") == "low" and not validation.get("can_answer", True):
+                        result["success"] = False
+                        result["message"] = "Query may not be answerable with available data"
+                        result["suggestions"] = validation.get("suggestions", [])
+                        return result
+                except Exception as val_e:
+                    print(f"⚠️ Query validation failed: {str(val_e)}")
+                    # Continue with reformulation even if validation fails
+
+            # Reformulate the query
+            reformulated = self._reformulate_query(user_query)
+            # If reformulated is empty or None, fallback to original query
+            if not reformulated or not reformulated.strip():
+                print("⚠️ Reformulator returned empty result, using original query")
+                reformulated = user_query
+            result["reformulated_query"] = reformulated
+
+            print(f"✅ Query processing completed successfully")
+            return result
+
+        except Exception as e:
+            print(f"❌ Error processing student query: {str(e)}")
+            print(f"   Error type: {type(e).__name__}")
+            import traceback
+            traceback.print_exc()
+            # Return original query as fallback
+            result["success"] = True  # Set to True so system continues with original query
+            result["error"] = str(e)
+            result["reformulated_query"] = user_query
+            result["message"] = "Query reformulation failed, using original query"
+            return result
+
+
+# Singleton instance for caching
+_query_reformulator_instance = None
+
+def get_query_reformulator() -> StudentQueryReformulator:
+    """Get cached query reformulator instance"""
+    global _query_reformulator_instance
+    if _query_reformulator_instance is None:
+        _query_reformulator_instance = StudentQueryReformulator()
+    return _query_reformulator_instance
+
+
+def reformulate_student_query(user_query: str, csv_path: str = None) -> str:
+    """
+    Convenience function to reformulate student transcript queries
+    
+    Args:
+        user_query (str): Original user query
+        csv_path (str, optional): Path to CSV file for structure analysis
+        
+    Returns:
+        str: Reformulated query ready for CSV agent
+    """
+    reformulator = get_query_reformulator()
+    result = reformulator.process_student_query(user_query, csv_path)
+    
+    if result["success"]:
+        return result["reformulated_query"]
+    else:
+        print(f"⚠️ Query reformulation failed: {result.get('error', 'Unknown error')}")
+        return user_query  # Return original query as fallback

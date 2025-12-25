@@ -631,43 +631,74 @@ function App() {
 
                   {messages.map((m) => (
                     <div
-                      key={m.id}
-                      className={`flex ${
-                        m.role === 'user' ? 'justify-end' : 'justify-start'
+                    className={`${
+                      m.role === 'user' ? 'justify-end' : 'justify-start'
+                    } flex`}
+                  >
+                    <div
+                      className={`rounded-lg shadow-sm ${
+                        m.role === 'user'
+                          ? 'bg-amber-500 text-slate-900 px-4 py-2 max-w-xl'
+                          : 'bg-white text-slate-800 p-0 max-w-2xl w-full'
                       }`}
                     >
-                      <div
-                        className={`max-w-xl px-4 py-2 rounded-lg text-sm whitespace-pre-wrap shadow-sm ${
-                          m.role === 'user'
-                            ? 'bg-amber-500 text-slate-900'
-                            : 'bg-white text-slate-800'
-                        }`}
-                      >
-                        {m.content}
-                        {m.role === 'assistant' &&
-                          m.sources &&
-                          m.sources.length > 0 && (
-                            <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
-                              <div className="font-semibold mb-1">Sources</div>
-                              <ul className="list-disc pl-4 space-y-1">
-                                {m.sources
-                                  .slice(0, 4)
-                                  .map((s: any, idx: number) => (
-                                    <li key={idx}>
-                                      {s.filename || s.title || 'Source'}{' '}
-                                      {s.page && <span>(p. {s.page})</span>}
-                                    </li>
-                                  ))}
-                              </ul>
-                              {typeof m.confidence === 'number' && (
-                                <div className="mt-1 text-[11px] text-slate-500">
-                                  Confidence: {Math.round(m.confidence * 100)}%
-                                </div>
-                              )}
+                      {/* Render HTML content for assistant, plain text for user */}
+                      {m.role === 'assistant' ? (
+                        <div className="assistant-message">
+                          <div
+                            className="prose prose-sm max-w-none p-4"
+                            dangerouslySetInnerHTML={{ __html: m.content }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="whitespace-pre-wrap text-sm">{m.content}</div>
+                      )}
+
+                      {m.role === 'assistant' &&
+                        m.sources &&
+                        m.sources.length > 0 && (
+                          <div className="mt-0 border-t border-slate-200 px-4 py-3 bg-slate-50 rounded-b-lg">
+                            <div className="font-semibold mb-1.5 text-xs text-slate-700">
+                              📚 Sources
                             </div>
-                          )}
-                      </div>
+                            <ul className="space-y-1">
+                              {m.sources
+                                .slice(0, 4)
+                                .map((s: any, idx: number) => (
+                                  <li
+                                    key={idx}
+                                    className="text-xs text-slate-600 flex items-start gap-1.5"
+                                  >
+                                    <span className="text-amber-500 mt-0.5">•</span>
+                                    <span>
+                                      {s.filename || s.title || 'Source'}{' '}
+                                      {s.page && (
+                                        <span className="text-slate-500">(p. {s.page})</span>
+                                      )}
+                                    </span>
+                                  </li>
+                                ))}
+                            </ul>
+                            {typeof m.confidence === 'number' && (
+                              <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500">
+                                <span>Confidence:</span>
+                                <div className="flex-1 bg-slate-200 rounded-full h-1.5 max-w-[100px]">
+                                  <div
+                                    className="bg-amber-500 h-1.5 rounded-full transition-all"
+                                    style={{
+                                      width: `${Math.round(m.confidence * 100)}%`,
+                                    }}
+                                  />
+                                </div>
+                                <span className="font-medium">
+                                  {Math.round(m.confidence * 100)}%
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                     </div>
+                  </div>
                   ))}
 
                   {loading && (

@@ -10,13 +10,11 @@ class ToolSchema(BaseModel):
 
 TOOLS: List[ToolSchema] = [
     ToolSchema(
-        name="TranscriptTool",
-        description="Answers questions about student transcripts from CSV/PDF data. Supports single student (GPA, courses, terms) and aggregate queries (top students, counts, averages). Use for any transcript-related question.",
-        parameters={
-            "student_name": "Optional: filter by student name (fuzzy match)",
-            "term": "Optional: filter by term/semester",
-            "metric": "GPA, courses, credits, grades, counts",
-        }
+    name="TranscriptTool",
+    description="Answers questions about student transcripts using intelligent query reformulation and CSV analysis. Handles all transcript queries: student GPA, course enrollment, grade analysis, rankings, comparisons, and aggregate statistics. Automatically interprets natural language questions.",
+    parameters={
+        # No parameters needed - query reformulation handles everything
+    }
     ),
     ToolSchema(
         name="PayrollTool",
