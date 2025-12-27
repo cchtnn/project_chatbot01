@@ -1,4 +1,7 @@
-"""Generic RAG tool - PRODUCTION READY with normalized similarity."""
+"""
+backend/services/tools/generic_rag_tool.py
+Generic RAG tool - PRODUCTION READY with normalized similarity.
+"""
 from typing import Dict, Any, List
 from core.retrieval import get_hybrid_retriever
 from services.rag_pipeline import RAGPipeline
@@ -48,12 +51,12 @@ def answer(question: str, params: Dict[str, Any] = None) -> ToolResult:
 
     logger.info(f"[GenericRagTool] question='{question}' filters={filters}")
 
-    # Retrieve 10+ chunks (from fixed retrieval.py)
+    # Retrieve 10+ chunks
     all_results = retriever.retrieve(question, top_k=12, filters=filters)
     
     logger.info(f"[Retriever] returned {len(all_results)} raw chunks")
 
-    # Smart deduplication (diversity + quality)
+    # Smart deduplication
     results = smart_dedup(all_results, max_per_doc=2, max_total=8)
     filenames = [r.metadata.get("filename", "unknown") for r in results]
     logger.info(f"[GenericRagTool] SMART DEDUP --> {len(results)} chunks: {filenames}")
@@ -68,7 +71,7 @@ def answer(question: str, params: Dict[str, Any] = None) -> ToolResult:
             sources=[],
         )
 
-    # Normalized similarity (0-1 scale)
+    # Normalized similarity
     raw_scores = [r.score for r in results]
     raw_avg = sum(raw_scores) / len(results)
     norm_similarity = normalize_distance(raw_avg)
@@ -79,12 +82,15 @@ def answer(question: str, params: Dict[str, Any] = None) -> ToolResult:
         f"(range: {min(norm_scores):.3f}-{max(norm_scores):.3f})"
     )
 
-    # NO EARLY EXIT - Always generate answer
+    # Generate answer
     context = "\n\n".join(r.content for r in results)
-    logger.info(f"[CONTEXT PREVIEW] {context[:400]}...")
-    logger.info(f"[DEBUG] Question: {question}")
-
     answer_text = rag_pipeline._generate_answer(context, question)
+
+    # PHASE 3: Dynamic format_hint detection (NEW)
+    format_hint = "text"  # default
+    # If query asks for comparison/listing and we have multiple results
+    if any(kw in question.lower() for kw in ['compare', 'list all', 'show all', 'table', 'versus', 'vs']) and len(results) >= 5:
+        format_hint = "table"
 
     sources = [
         {
@@ -103,8 +109,8 @@ def answer(question: str, params: Dict[str, Any] = None) -> ToolResult:
             "norm_similarity": norm_similarity
         },
         explanation=answer_text,
-        confidence=min(0.95, norm_similarity + 0.25),  # Always decent confidence
-        format_hint="text",
+        confidence=min(0.95, norm_similarity + 0.25),
+        format_hint=format_hint,  # Now dynamic
         citations=filenames,
         sources=sources,
     )

@@ -1,4 +1,6 @@
+// frontend/jericho-ui/src/App.tsx
 import React, { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 
 type Screen = 'login' | 'chat'
 
@@ -198,9 +200,8 @@ function App() {
       const data = await resp.json()
       const raw = data.sessions || []
 
-      // Map with proper field name handling (both underscore and no-underscore variants)
       const list: SessionInfo[] = raw.map((s: any) => ({
-        session_id: s.session_id ?? s.sessionid, // Try .session_id first, fallback to .sessionid
+        session_id: s.session_id ?? s.sessionid,
         session_name:
           s.session_name ??
           s.sessionname ??
@@ -210,7 +211,7 @@ function App() {
 
       if (list.length > 0) {
         const last = list[list.length - 1]
-        setCurrentSessionId(last.session_id) // Now this is guaranteed a number
+        setCurrentSessionId(last.session_id)
         await loadHistory(last.session_id)
       } else {
         await handleNewChat()
@@ -267,12 +268,12 @@ function App() {
       })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const data = await resp.json()
-      const sessionId: number = data.session_id ?? data.sessionid // Add fallback just in case
+      const sessionId: number = data.session_id ?? data.sessionid
 
-      console.log('[handleNewChat] Created session:', sessionId) // DEBUG
+      console.log('[handleNewChat] Created session:', sessionId)
 
       if (!sessionId) {
-        console.error('[handleNewChat] No sessionId returned!', data) // DEBUG
+        console.error('[handleNewChat] No sessionId returned!', data)
         return
       }
 
@@ -281,7 +282,7 @@ function App() {
         session_name: 'New Chat',
       }
       setSessions((prev) => [...prev, newSession])
-      setCurrentSessionId(sessionId) // This should now be a real number
+      setCurrentSessionId(sessionId)
       setMessages([])
       setNextId(1)
     } catch (err) {
@@ -435,7 +436,6 @@ function App() {
       form.append('session_id', String(currentSessionId))
 
       await fetch('http://localhost:8000/feedback', {
-        // Correct endpoint
         method: 'POST',
         body: form,
         credentials: 'include',
@@ -802,13 +802,82 @@ function App() {
                       }`}
                     >
                       <div
-                        className={`max-w-2xl rounded-xl px-5 py-4 text-sm whitespace-pre-wrap shadow-md ${
+                        className={`max-w-2xl rounded-xl px-5 py-4 text-sm shadow-md ${
                           m.role === 'user'
                             ? 'bg-gradient-to-r from-amber-500 to-amber-400 text-slate-900 font-medium'
                             : 'bg-white text-slate-800 border border-slate-200'
                         }`}
                       >
-                        {m.content}
+                        {/* MESSAGE CONTENT - MODIFIED FOR MARKDOWN */}
+                        {m.role === 'user' ? (
+                          m.content
+                        ) : (
+                          <ReactMarkdown
+                            components={{
+                              h3: ({ node, ...props }) => (
+                                <h3
+                                  className="text-lg font-bold mt-4 mb-2 text-slate-900"
+                                  {...props}
+                                />
+                              ),
+                              p: ({ node, ...props }) => (
+                                <p className="mb-2" {...props} />
+                              ),
+                              ul: ({ node, ...props }) => (
+                                <ul
+                                  className="list-disc ml-5 mb-2 space-y-1"
+                                  {...props}
+                                />
+                              ),
+                              ol: ({ node, ...props }) => (
+                                <ol
+                                  className="list-decimal ml-5 mb-2 space-y-1"
+                                  {...props}
+                                />
+                              ),
+                              li: ({ node, ...props }) => (
+                                <li className="text-sm" {...props} />
+                              ),
+                              strong: ({ node, ...props }) => (
+                                <strong
+                                  className="font-bold text-slate-900"
+                                  {...props}
+                                />
+                              ),
+                              table: ({ node, ...props }) => (
+                                <div className="overflow-x-auto my-3">
+                                  <table
+                                    className="min-w-full border border-slate-300 text-sm"
+                                    {...props}
+                                  />
+                                </div>
+                              ),
+                              thead: ({ node, ...props }) => (
+                                <thead className="bg-slate-100" {...props} />
+                              ),
+                              th: ({ node, ...props }) => (
+                                <th
+                                  className="border border-slate-300 px-3 py-2 text-left font-semibold"
+                                  {...props}
+                                />
+                              ),
+                              td: ({ node, ...props }) => (
+                                <td
+                                  className="border border-slate-300 px-3 py-2"
+                                  {...props}
+                                />
+                              ),
+                              blockquote: ({ node, ...props }) => (
+                                <blockquote
+                                  className="border-l-4 border-amber-400 pl-4 italic text-slate-600 my-2"
+                                  {...props}
+                                />
+                              ),
+                            }}
+                          >
+                            {m.content}
+                          </ReactMarkdown>
+                        )}
 
                         {m.role === 'assistant' && (
                           <>

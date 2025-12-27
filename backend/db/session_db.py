@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Tuple
 
+
 from sqlalchemy import (
     create_engine,
     Column,
@@ -13,21 +14,27 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker, Session
 
+
 # Base dir is backend/
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "data" / "session.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
+
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 Base = declarative_base()
 
+
 # Add UserFeedback AFTER ChatSession & ChatMessage classes (ORDER MATTERS)
+
 
 class ChatSession(Base):
     __tablename__ = 'chatsessions'
@@ -37,6 +44,7 @@ class ChatSession(Base):
     createdat = Column(DateTime, default=datetime.utcnow)
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
 
+
 class ChatMessage(Base):
     __tablename__ = 'chatmessages'
     id = Column(Integer, primary_key=True, index=True)
@@ -45,6 +53,7 @@ class ChatMessage(Base):
     answer = Column(Text)
     createdat = Column(DateTime, default=datetime.utcnow)
     session = relationship("ChatSession", back_populates="messages")
+
 
 # ADD THIS LAST (after ChatSession/ChatMessage)
 class UserFeedback(Base):
@@ -56,8 +65,9 @@ class UserFeedback(Base):
     username = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
 def add_feedback(message_id: int, session_id: int, username: str, rating: str):
-    db = getdb()
+    db = get_db()
     try:
         fb = UserFeedback(
             message_id=message_id,
@@ -69,6 +79,7 @@ def add_feedback(message_id: int, session_id: int, username: str, rating: str):
         db.commit()
     finally:
         db.close()
+
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
@@ -121,12 +132,15 @@ def add_message(session_id: int, question: str, answer: str) -> None:
 
 
 def get_history(session_id: int) -> List[Tuple[str, str]]:
+    """
+    FIXED: Changed created_at → createdat to match ChatMessage model
+    """
     db = get_db()
     try:
         msgs = (
             db.query(ChatMessage)
             .filter(ChatMessage.session_id == session_id)
-            .order_by(ChatMessage.created_at.asc())
+            .order_by(ChatMessage.createdat.asc())  # FIXED: was created_at
             .all()
         )
         return [(m.question, m.answer) for m in msgs]
@@ -147,11 +161,14 @@ def count_messages(session_id: int) -> int:
 
 
 def rename_session(session_id: int, new_name: str) -> None:
+    """
+    FIXED: Changed session_name → sessionname to match ChatSession model
+    """
     db = get_db()
     try:
         s = db.query(ChatSession).filter(ChatSession.id == session_id).first()
         if s:
-            s.session_name = new_name
+            s.sessionname = new_name  # FIXED: was session_name
             db.commit()
     finally:
         db.close()
@@ -166,5 +183,3 @@ def delete_session(session_id: int) -> None:
             db.commit()
     finally:
         db.close()
-
-

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+backend/services/tools/transcript_tool.py
 TRANSCRIPT TOOL - Universal CSV Agent with Dynamic Context + Smart Course Filtering
 Production-ready solution for ALL transcript queries with intelligent data quality handling.
 Location: backend/services/tools/transcript_tool.py
@@ -276,18 +277,6 @@ CORE TECHNIQUES:
    
    Step 2: INTELLIGENT FILTERING - Remove junk:
    valid_courses = [c for c in all_courses if c and len(str(c).strip()) > 5 and not any(x in str(c) for x in ['Total', '/', '-', ':']) and not str(c).replace('-','').replace('/','').isdigit()]
-   
-   Why: Courses have meaningful names (>5 chars). Dates have /, -, or are numeric. "Totals" are summary rows.
-   
-   CRITICAL FILTERS:
-   - Remove if empty or too short (< 5 chars)
-   - Remove if contains date patterns (/, -, or all digits like "12/16/2024" or "12-11-2024")
-   - Remove if contains "Total" (Term Totals, Career Totals, Subterm Totals)
-   - Remove if just whitespace or punctuation
-   
-   Example filtering:
-   KEEP: "Introduction to Biology", "Elementary Algebra", "College Writing I"
-   REMOVE: "12/16/2024", "12-11-2024", "03-06-2025", "Term Totals :", " ", "Career Totals :"
 
 3. GPA CALCULATIONS (filter > 0):
    df[df['Student Name'].str.contains('Trista.*Barrett', case=False, regex=True, na=False) & (df['GPA'] > 0)]['GPA'].max()
@@ -296,57 +285,47 @@ CORE TECHNIQUES:
    df[df['GPA'] > 0].groupby('Student Name')['GPA'].max().sort_values(ascending=False).head(5)
 
 ================================================================================
-OUTPUT FORMATTING - NATURAL LANGUAGE ONLY
+OUTPUT FORMATTING - PROFESSIONAL MARKDOWN (PHASE 3)
 ================================================================================
 
-NEVER output raw Python lists, pandas Series, or DataFrames.
-ALWAYS format as natural, professional text.
+ALWAYS format output with Markdown for professional presentation:
 
-For COURSE LISTS:
-WRONG: ['Course 1', 'Course 2']
-RIGHT: 
-Student Name is enrolled in:
-- Course 1
-- Course 2
+For GPA queries:
+WRONG: "4.0"
+RIGHT: "The GPA for **Trista Denay Barrett** is **4.0**"
 
-For GPA:
-WRONG: 4.0
-RIGHT: The GPA for Student Name is 4.0
-
-For RANKINGS:
-WRONG: Student Name    4.0
+For course lists:
 RIGHT:
-1. Student Name - GPA: 4.0
-2. Student Name - GPA: 3.8
-
-================================================================================
-EXAMPLES WITH INTELLIGENT FILTERING
-================================================================================
-
-Query: "What is Trista Barrett's GPA?"
-Code: df[df['Student Name'].str.contains('Trista.*Barrett', case=False, regex=True, na=False) & (df['GPA'] > 0)]['GPA'].max()
-Result: 4.0
-Output: "The GPA for Trista Denay Barrett is 4.0"
-
-Query: "What courses is Joshua Don Gaitan enrolled in?"
-Code: 
-student_data = df[df['Student Name'].str.contains('Joshua.*Gaitan', case=False, regex=True, na=False)]
-all_courses = student_data['Course Title'].dropna().unique().tolist() + (student_data['Course Number'].dropna().unique().tolist() if 'Course Number' in df.columns else [])
-valid_courses = [c for c in all_courses if c and len(str(c).strip()) > 5 and not any(x in str(c) for x in ['Total', '/', '-']) or (str(c).strip() and not str(c).replace('-','').replace('/','').replace(' ','').isdigit())]
-
-Result: ['Introduction to Biology', 'Elementary Algebra', 'College Writing I', ...]
-Output: "Joshua Don Gaitan is enrolled in:
+"**Joshua Don Gaitan** is enrolled in:
 - Introduction to Biology
 - Elementary Algebra  
 - College Writing I
-- Biblical Literature
-- History of World Civilization II"
+- Biblical Literature"
 
-Query: "Top 5 students by GPA"
-Code: df[df['GPA'] > 0].groupby('Student Name')['GPA'].max().sort_values(ascending=False).head(5)
-Output: "Top 5 students by GPA:
-1. Student Name - GPA: 4.0
-..."
+For rankings:
+RIGHT:
+"Top 5 Students by GPA:
+
+1. **Student Name** - GPA: **4.0**
+2. **Student Name** - GPA: **3.8**
+3. **Student Name** - GPA: **3.7**"
+
+For counts:
+RIGHT: "There are **X** students with GPA above 3.5" (replace X with actual count)
+
+For tables (when showing multiple students):
+RIGHT:
+| Student Name | GPA |
+|--------------|-----|
+| **Trista Barrett** | **4.0** |
+| **Leslie Bright** | **3.8** |
+
+FORMATTING RULES:
+- Use **bold** for names, numbers, and key facts
+- Use bullet points (-) for lists  
+- Use tables when showing 3+ items with multiple attributes
+- NO raw Python lists or DataFrames
+- NO phrases like "According to" or "Based on"
 
 ================================================================================
 EXECUTION RULES
@@ -355,14 +334,14 @@ EXECUTION RULES
 1. Use regex for name matching: 'First.*Last'
 2. For courses: Check BOTH Course Title AND Course Number
 3. FILTER OUT: dates (contain / or -), "Total" strings, empty values, short strings
-4. Format output naturally (NOT raw Python)
-5. Execute code ONCE, format, respond
+4. Format output with Markdown (bold, bullets, tables)
+5. Execute code ONCE, format professionally, respond
 
 Query hints: {query_hints}
 
 CRITICAL: For course queries, ALWAYS filter out dates and "Total" entries before responding.
 
-Solve now: Write code with intelligent filtering, execute, format naturally, respond.
+Solve now: Write code with intelligent filtering, execute, format with Markdown, respond professionally.
 """
 
 # ============================================================================

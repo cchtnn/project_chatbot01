@@ -1,4 +1,5 @@
 """
+backend/models/schemas.py
 API request/response Pydantic schemas.
 
 Defines all FastAPI endpoint input/output models with validation.

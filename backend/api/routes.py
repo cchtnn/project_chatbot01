@@ -1,8 +1,10 @@
 """
-Jericho API routes
+backend/api/routes.py
+Jericho API routes - ENHANCED with Context Resolution
 
 - RAG endpoints (hybrid retrieval + generation)
 - UI-compatible endpoints expected by chat.html / login.html / admin.html
+- PHASE 2: Context-aware query processing with session history
 """
 
 from datetime import datetime
@@ -24,9 +26,10 @@ from api.deps import get_current_user
 from core import get_logger
 from services.rag_pipeline import RAGPipeline
 from core.retrieval import get_hybrid_retriever
-from db import session_db  # NEW: DB-backed sessions/history
+from db import session_db
 
 from services.orchestrator import Orchestrator, OrchestratorRequest
+from services.context_resolver import ContextResolver  # NEW
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -38,6 +41,9 @@ hybrid_retriever = get_hybrid_retriever()
 
 # Global singleton orchestrator
 orchestrator = Orchestrator(rag_pipeline=rag_pipeline)
+
+# Global context resolver (NEW)
+context_resolver = ContextResolver()
 
 # ---------- SIMPLE RAG API (TEST / DEBUG) ----------
 
@@ -113,7 +119,6 @@ async def history(session_id: int, user=Depends(get_current_user)):
     JS calls: GET /history?session_id=...
     Response: {"history": [{"question": "...", "answer": "..."}, ...]}
     """
-    # (Optional) ownership check can be added later
     records = session_db.get_history(session_id)
     return {
         "history": [
@@ -151,7 +156,7 @@ async def delete_session(
     return {"success": True}
 
 
-# ---------- CORE RAG /query USED BY UI (WITH HISTORY) ----------
+# ---------- CORE RAG /query USED BY UI (WITH HISTORY + CONTEXT) ----------
 
 @router.post("/query")
 async def query_endpoint(
@@ -162,6 +167,7 @@ async def query_endpoint(
 ):
     """
     Main chat endpoint used by chat.html JS.
+    ENHANCED: Context-aware with session history (Phase 2)
 
     Frontend sends FormData:
       - query
@@ -174,14 +180,30 @@ async def query_endpoint(
       - sources
       - tools_used
       - confidence
-      - sessionnameupdated (bool)  <-- name chosen to match old UI
+      - sessionnameupdated (bool)
     """
     username = getattr(user, "username", "test_user")
     logger.info(f"[query] user={username} q={query!r} session_id={session_id} private={private}")
 
     try:
-        # Delegate to orchestrator
-        request = OrchestratorRequest(query=query)
+        # PHASE 2: Fetch session history and resolve context
+        history_records = session_db.get_history(session_id)
+        conversation_history = [
+            {"question": q, "answer": a}
+            for (q, a) in history_records
+        ]
+        
+        # Resolve ambiguous references using context
+        enriched_query = context_resolver.resolve(query, conversation_history)
+        
+        if enriched_query != query:
+            logger.info(f"[query] Context enriched: '{query}' → '{enriched_query}'")
+        
+        # Delegate to orchestrator WITH HISTORY
+        request = OrchestratorRequest(
+            query=enriched_query,
+            conversation_history=conversation_history
+        )
         response = orchestrator.handle_query(request)
         answer_text = response.answer
 
@@ -189,7 +211,7 @@ async def query_endpoint(
         before_count = session_db.count_messages(session_id)
         session_db.add_message(session_id=session_id, question=query, answer=answer_text)
 
-        # Auto-rename session on first question (similar to old logic)
+        # Auto-rename session on first question
         sessionnameupdated = False
         if before_count == 0:
             words = query.strip().split()
@@ -218,7 +240,7 @@ async def upload_endpoint(
     files: List[UploadFile] = File(...),
     session_id: int = Form(...),
     private: bool = Form(False),
-    user=Depends(get_current_user),  # require auth
+    user=Depends(get_current_user),
 ):
     """
     Upload endpoint used by chat.html.
@@ -261,7 +283,7 @@ async def upload_endpoint(
         raise HTTPException(status_code=500, detail="Upload/ingest failed")
 
 
-# ---------- REACT-FACING QUERY (ORCHESTRATOR) ----------
+# ---------- REACT-FACING QUERY (ORCHESTRATOR + CONTEXT) ----------
 
 class ReactChatRequest(BaseModel):
     query: str
@@ -272,10 +294,11 @@ class ReactChatRequest(BaseModel):
 @router.post("/react-query")
 async def react_query(
     req: ReactChatRequest,
-    user=Depends(get_current_user),  # keep auth guard
+    user=Depends(get_current_user),
 ):
     """
     React-facing query endpoint.
+    ENHANCED: Context-aware with session history (Phase 2)
 
     Uses the Orchestrator so queries are routed to the right domain tool,
     and persists Q&A into session_db keyed by sessionid.
@@ -286,8 +309,24 @@ async def react_query(
             f"[react-query] user={username} q={req.query!r} session={req.sessionid}"
         )
 
-        # Orchestrator call
-        orch_request = OrchestratorRequest(query=req.query)
+        # PHASE 2: Fetch session history and resolve context
+        history_records = session_db.get_history(req.sessionid)
+        conversation_history = [
+            {"question": q, "answer": a}
+            for (q, a) in history_records
+        ]
+        
+        # Resolve ambiguous references using context
+        enriched_query = context_resolver.resolve(req.query, conversation_history)
+        
+        if enriched_query != req.query:
+            logger.info(f"[react-query] Context enriched: '{req.query}' → '{enriched_query}'")
+
+        # Orchestrator call WITH HISTORY
+        orch_request = OrchestratorRequest(
+            query=enriched_query,
+            conversation_history=conversation_history
+        )
         orch_response = orchestrator.handle_query(orch_request)
         answer_text = orch_response.answer
 
@@ -320,13 +359,14 @@ async def react_query(
         logger.error(f"[react-query] orchestrator error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Query failed")
 
+
 # ---------- LOGOUT ----------
 
 @router.post("/logout")
 async def logout(response: Response):
-    # Adjust cookie names if different
     response.delete_cookie("access_token")
     return {"success": True}
+
 
 @router.post("/feedback")
 async def submit_feedback(
@@ -344,4 +384,3 @@ async def submit_feedback(
     except Exception as e:
         logger.error(f"Feedback error: {e}")
         raise HTTPException(status_code=500, detail="Feedback failed")
-

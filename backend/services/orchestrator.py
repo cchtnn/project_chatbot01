@@ -1,7 +1,9 @@
 # services/orchestrator.py
 # ENTERPRISE-GRADE SEMANTIC ROUTING ORCHESTRATOR (3-LAYER CONSERVATIVE)
 # Semantic Router + Parallel Execution for Bias Protection
+# ENHANCED: Conversational Layer + Source Formatting
 # BACKWARD COMPATIBLE with existing Orchestrator interface
+
 
 from typing import Dict, Any, List, Tuple, Optional
 import json
@@ -12,7 +14,9 @@ from datetime import datetime
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
 from pydantic import BaseModel
+
 
 from core import get_logger
 from config import get_settings
@@ -23,9 +27,12 @@ from services.tools.bor_planner_tool import answer as bor_answer
 from services.tools.generic_rag_tool import answer as rag_answer
 from models.schemas import ToolResult
 from services.rag_pipeline import RAGPipeline
+from services.conversational_handler import ConversationalHandler  # NEW
+
 
 logger = get_logger(__name__)
 settings = get_settings()
+
 
 TOOL_MAP = {
     "TranscriptTool": transcript_answer,
@@ -35,9 +42,11 @@ TOOL_MAP = {
 }
 
 
+
 # =============================================================================
 # SEMANTIC ROUTER - Embedded in Orchestrator
 # =============================================================================
+
 
 class SemanticRouter:
     """
@@ -79,13 +88,12 @@ class SemanticRouter:
                     "Display students in tabular format sorted by GPA",
                     "What courses is Leslie enrolled in?",
                     "Show me all students with GPA above 3.5",
-                    "What courses is Leslie enrolled in?",  # ← Already there
-                    "What is Trista's GPA?",  # First name only
-                    "Show courses for John",  # Short form
-                    "Trista Barrett GPA",  # No question words
-                    "Leslie courses enrolled",  # Minimal phrasing
-                    "GPA for Arnoldo",  # Reverse pattern
-                    "Courses taken by Blen",  # Name variations
+                    "What is Trista's GPA?",
+                    "Show courses for John",
+                    "Trista Barrett GPA",
+                    "Leslie courses enrolled",
+                    "GPA for Arnoldo",
+                    "Courses taken by Blen",
                 ]
             },
             
@@ -207,9 +215,11 @@ class SemanticRouter:
         return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
+
 # =============================================================================
 # FEEDBACK TRACKING
 # =============================================================================
+
 
 class RoutingFeedback:
     """Track routing decisions for monitoring."""
@@ -251,13 +261,16 @@ class RoutingFeedback:
         }
 
 
+
 # =============================================================================
 # PYDANTIC MODELS
 # =============================================================================
 
+
 class OrchestratorRequest(BaseModel):
     query: str
     conversation_history: List[Dict[str, str]] = []
+
 
 class OrchestratorResponse(BaseModel):
     answer: str
@@ -266,15 +279,18 @@ class OrchestratorResponse(BaseModel):
     sources: List[Dict[str, Any]]
 
 
+
 # =============================================================================
 # MAIN ORCHESTRATOR CLASS
 # =============================================================================
 
+
 class Orchestrator:
     """
-    3-Layer Conservative Semantic Routing Orchestrator.
+    4-Layer Enhanced Semantic Routing Orchestrator with Conversational Support.
     
     Architecture:
+    - Layer -1: Conversational detection (NEW - greetings/thanks/help)
     - Layer 0: Explicit format markers (optional, < 1ms)
     - Layer 1: Semantic router (candidate generator, 50-100ms)
     - Layer 2: Conservative decision + parallel execution (200-600ms when needed)
@@ -283,11 +299,12 @@ class Orchestrator:
     """
     
     def __init__(self, rag_pipeline: Optional[RAGPipeline] = None) -> None:
-        """Initialize orchestrator with semantic router."""
+        """Initialize orchestrator with semantic router and conversational handler."""
         self.rag_pipeline = rag_pipeline or RAGPipeline()
         self.planner_pipeline = self.rag_pipeline
         self.feedback = RoutingFeedback()
         self._cached_parallel_result = None
+        self._cached_conversational_result = None  # NEW
         
         # Initialize semantic router
         try:
@@ -299,6 +316,14 @@ class Orchestrator:
         except Exception as e:
             logger.error(f"[Orchestrator] Semantic router failed to init: {e}")
             self.semantic_router = None
+        
+        # Initialize conversational handler (NEW)
+        try:
+            self.conversational_handler = ConversationalHandler()
+            logger.info("[Orchestrator] Conversational handler initialized")
+        except Exception as e:
+            logger.error(f"[Orchestrator] Conversational handler failed: {e}")
+            self.conversational_handler = None
     
     def handle_query(self, request: OrchestratorRequest) -> OrchestratorResponse:
         """Main orchestrator entry point."""
@@ -310,6 +335,18 @@ class Orchestrator:
             f"[Orchestrator] Routed to {tool_name} "
             f"(confidence={confidence:.2f}, source={routing_source})"
         )
+        
+        # NEW: Check if conversational
+        if hasattr(self, '_cached_conversational_result') and self._cached_conversational_result:
+            result = self._cached_conversational_result
+            self._cached_conversational_result = None
+            
+            return OrchestratorResponse(
+                answer=result.explanation,
+                tools_used=["ConversationalHandler"],
+                confidence=result.confidence,
+                sources=[],
+            )
         
         # Check if we have cached parallel result
         if self._cached_parallel_result:
@@ -394,23 +431,71 @@ class Orchestrator:
         ])
         avg_conf = sum(t.confidence for t in tool_results) / len(tool_results)
         
-        merged_sources: List[Dict[str, Any]] = []
-        for tr in tool_results:
-            if getattr(tr, "sources", None):
-                merged_sources.extend(tr.sources)
+        # NEW: Universal source formatting (Phase 4)
+        formatted_sources = self._format_sources(tool_results, tools_used)
         
         return OrchestratorResponse(
             answer=final_answer,
             tools_used=tools_used,
             confidence=avg_conf,
-            sources=merged_sources,
+            sources=formatted_sources,
         )
+    
+    def _format_sources(self, tool_results: List[ToolResult], tools_used: List[str]) -> List[Dict[str, Any]]:
+        """
+        Universal source formatter - converts tool citations to UI format.
+        
+        Handles:
+        - CSV sources (transcript, payroll)
+        - PDF sources (policies, handbooks)
+        - JSON sources (BOR meetings)
+        """
+        formatted_sources = []
+        
+        for tool_result, tool_name in zip(tool_results, tools_used):
+            # Priority 1: Use tool_result.sources if available (GenericRAG provides this)
+            if hasattr(tool_result, 'sources') and tool_result.sources:
+                formatted_sources.extend(tool_result.sources)
+                continue
+            
+            # Priority 2: Convert citations to source format
+            if hasattr(tool_result, 'citations') and tool_result.citations:
+                for citation in tool_result.citations:
+                    # Determine source type from file extension
+                    ext = citation.split('.')[-1].lower() if '.' in citation else 'unknown'
+                    
+                    source_type_map = {
+                        'csv': 'Structured Data',
+                        'pdf': 'Document',
+                        'json': 'Structured Data',
+                        'docx': 'Document',
+                        'txt': 'Document'
+                    }
+                    
+                    formatted_sources.append({
+                        "filename": citation,
+                        "type": source_type_map.get(ext, 'File'),
+                        "tool": tool_name,
+                        "relevance": tool_result.confidence if hasattr(tool_result, 'confidence') else 0.8
+                    })
+        
+        # Deduplicate by filename
+        seen = set()
+        unique_sources = []
+        for src in formatted_sources:
+            key = src.get("filename", "")
+            if key and key not in seen:
+                seen.add(key)
+                unique_sources.append(src)
+        
+        return unique_sources
     
     def _route_query(self, query: str) -> Tuple[str, float, str]:
         """
-        HYBRID ROUTING: LLM Description-Based + Semantic Validation
+        ENHANCED HYBRID ROUTING: Conversational -->LLM Description-Based -->Semantic Validation
         
         Architecture:
+        - Layer -1: Conversational detection (NEW - < 1ms)
         - Layer 0: Fast heuristics (< 1ms) - explicit markers
         - Layer 1: LLM with tool descriptions (150ms) - PRIMARY, understands intent
         - Layer 2: Semantic router (80ms) - VALIDATION
@@ -419,6 +504,17 @@ class Orchestrator:
         Returns: (tool_name, confidence, routing_source)
         """
         q_norm = query.lower()
+        
+        # =================================================================
+        # LAYER -1: CONVERSATIONAL DETECTION (NEW - HIGHEST PRIORITY)
+        # =================================================================
+        if self.conversational_handler:
+            conv_intent, conv_conf = self.conversational_handler.detect(query)
+            if conv_intent:
+                logger.info(f"[Layer -1] Conversational intent '{conv_intent}' -->ConversationalHandler")
+                # Cache the result so handle_query can use it
+                self._cached_conversational_result = self.conversational_handler.handle(conv_intent)
+                return ("ConversationalHandler", conv_conf, "conversational")
         
         # =================================================================
         # LAYER 0: Explicit Format Markers (< 1ms)
@@ -509,6 +605,7 @@ class Orchestrator:
         logger.warning("[Route] Both LLM and Semantic uncertain --> GenericRagTool fallback")
         return ("GenericRagTool", 0.30, "low_confidence_fallback")
 
+
     def _execute_parallel_with_judge(
         self, 
         query: str, 
@@ -562,13 +659,17 @@ class Orchestrator:
         tool_names = list(results.keys())
         judge_prompt = f"""You are judging which answer is better for this query.
 
+
 Query: "{query}"
+
 
 Answer A ({tool_names[0]}):
 {results[tool_names[0]]["result"].explanation[:300]}
 
+
 Answer B ({tool_names[1]}):
 {results[tool_names[1]]["result"].explanation[:300]}
+
 
 Which answer is more relevant and accurate? Respond with ONLY: A or B
 """
@@ -603,6 +704,7 @@ Which answer is more relevant and accurate? Respond with ONLY: A or B
         """Get routing performance metrics."""
         return self.feedback.get_metrics()
 
+
     def _llm_description_route(self, query: str) -> Tuple[Optional[str], float]:
         """
         LLM-based routing using tool DESCRIPTIONS (not examples).
@@ -613,27 +715,35 @@ Which answer is more relevant and accurate? Respond with ONLY: A or B
         
         prompt = f"""You are a query routing expert. Analyze this query and determine which tool can answer it based on PURPOSE.
 
+
 Query: "{query}"
 
+
 Available Tools:
+
 
 1. **TranscriptTool**
    Purpose: Handles questions about SPECIFIC STUDENT academic records - grades, GPA, courses taken by individual students, transcript data, enrollment status of named students in courses.
    Key capability: Queries data about individual students by name.
 
+
 2. **PayrollTool**
    Purpose: Handles payroll schedules, pay periods, check dates, payment processing dates.
    Key capability: Payroll calendar and payment timing information.
+
 
 3. **BorPlannerTool**
    Purpose: Handles Board of Regents meetings, committee schedules, governance events.
    Key capability: Meeting schedules and board governance calendars.
 
+
 4. **GenericRagTool**
    Purpose: Handles institutional policies, procedures, handbooks, general information, academic calendar, enrollment procedures (NOT individual student data).
    Key capability: Policy documents and general institutional information.
 
+
 Task: Which tool's PURPOSE best matches this query's INTENT?
+
 
 Rules:
 - If query asks about a SPECIFIC STUDENT's data (GPA, courses, grades) --> TranscriptTool
@@ -641,8 +751,10 @@ Rules:
 - If query asks about board meetings --> BorPlannerTool
 - If query asks about policies/procedures/general info --> GenericRagTool
 
+
 Respond with JSON only (no explanation):
 {{"tool": "ToolName", "confidence": 0.85}}
+
 
 Where confidence: 0.90-1.0 = very clear, 0.75-0.89 = clear, 0.60-0.74 = probable, <0.60 = uncertain
 """
@@ -674,4 +786,3 @@ Where confidence: 0.90-1.0 = very clear, 0.75-0.89 = clear, 0.60-0.74 = probable
         except Exception as e:
             logger.error(f"[LLM Route] Failed: {e}")
             return (None, 0.0)
-

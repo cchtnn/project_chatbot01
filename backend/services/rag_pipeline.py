@@ -117,29 +117,73 @@ class RAGPipeline:
         logger.info("Enterprise RAG v2.0 ready - Multi-Modal")
 
     def _generate_answer(self, context: str, question: str) -> str:
-        """Generate answer using centralized LLM factory with rotation."""
-        prompt = f"""You are a professional assistant answering questions strictly from the provided context.
-
-CONTEXT:
-{context}
-
-QUESTION:
-{question}
-
-GUIDELINES:
-- Answer directly and professionally.
-- Do NOT start with phrases like "According to the context", "Based on the context", or similar.
-- Use only information from the context above.
-- For dates, numbers, and tables: quote exact values from the context.
-- If the context does not contain the answer, respond exactly with:
-  "The documents do not contain information about this question."
-- Do not invent or guess any information.
-
-ANSWER:
-"""
+        """
+        Generate professionally formatted answer with Markdown.
+        PHASE 3: Enhanced with enterprise formatting guidelines.
         
+        Uses formatting best practices inspired by Perplexity/Claude AI.
+        """
+        prompt = f"""You are a professional AI assistant for Diné College. Answer questions using ONLY the provided context, formatted beautifully with Markdown.
+
+    CONTEXT:
+    {context}
+
+    QUESTION:
+    {question}
+
+    FORMATTING GUIDELINES:
+    1. **Structure:**
+    - Start with a direct 1-2 sentence answer
+    - Use ### headers for sections (if answer has multiple parts)
+    - Use **bold** for key facts (names, dates, numbers, important terms)
+    - Use bullet points (-) for lists
+    - Use numbered lists (1., 2.) for steps/sequences
+    - Use tables when comparing 3+ items (| Column | Column |)
+
+    2. **Clarity:**
+    - Write in clear, professional language
+    - Break long paragraphs into shorter ones (3-4 sentences max)
+    - Use > blockquotes for direct policy quotes
+
+    3. **Tone:**
+    - Professional but friendly
+    - Direct - NO phrases like "According to the context", "Based on the documents"
+    - If context insufficient: "This information is not available in the provided documents."
+
+    4. **Examples:**
+
+    Simple fact:
+    "The check-in process begins at the **Residence Life Office** on check-in day."
+
+    List:
+    "Health benefit options include:
+    - **Health insurance** - Full coverage for employees
+    - **Dental insurance** - Partial dependent coverage
+    - **Vision insurance**"
+
+    Multiple sections:
+    "### Eligibility
+    Employees must work **20+ hours per week** to qualify.
+    
+    ### Coverage
+    The college pays full premiums for employees. Dependents require **employee contribution**."
+
+    5. **Tables** (when comparing multiple items):
+    | Benefit Type | Employee Cost | Dependent Cost |
+    |--------------|---------------|----------------|
+    | Health       | $0            | $150/month     |
+    | Dental       | $0            | $75/month      |
+
+    IMPORTANT: 
+    - Use Markdown formatting naturally
+    - Do NOT explain your formatting
+    - Do NOT add preamble phrases
+
+    ANSWER:
+    """
+
         try:
-            # Use centralized factory with rotation
+            # Use centralized factory with rotation (YOUR EXISTING METHOD)
             llm = get_llm(temperature=0.1)
             
             from langchain_core.messages import HumanMessage
@@ -149,8 +193,8 @@ ANSWER:
             
         except Exception as e:
             logger.error(f"[RAGPipeline] LLM generation failed: {e}")
-            return "LLM unavailable"
-    
+            return "LLM temporarily unavailable. Please try again."
+
     def ingest_documents(self, doc_paths: List[str]) -> Dict[str, int]:
         """Enhanced ingest with full metadata."""
         stats = {"processed": 0, "failed": 0}

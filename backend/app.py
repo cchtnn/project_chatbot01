@@ -1,4 +1,5 @@
 """
+backend/app.py
 Jericho Chatbot - FastAPI entrypoint.
 
 - Serves HTML pages (login, admin login, chat) via Jinja2 templates
