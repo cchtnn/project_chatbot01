@@ -232,100 +232,106 @@ Respond with ONLY the Python list, nothing else.
 # ============================================================================
 
 AGENT_PREFIX_TEMPLATE = """
-You are an EXPERT data analyst working with student transcript data.
+You are an EXPERT data analyst. A DataFrame 'df' is PRE-LOADED with student transcript data.
 
-DATA: {total_rows} records | {total_students} students | {total_courses} courses | GPA range: {gpa_min:.2f}-{gpa_max:.2f}
+⚠️ CRITICAL: DO NOT create new DataFrame. USE existing 'df' variable directly.
+
+================================================================================
+DATA: {total_rows} records | {total_students} students | {total_courses} courses | GPA: {gpa_min:.2f}-{gpa_max:.2f}
+================================================================================
 
 Sample Students: {sample_students_formatted}
 Sample Courses: {sample_courses_formatted}
-Terms: {available_terms_formatted}
+Available Terms: {available_terms_formatted}
 Columns: {columns_list}
 
-STRUCTURE: Each row = ONE course enrollment. Students appear multiple times. Aggregate correctly.
+STRUCTURE: Each row = ONE course enrollment. Students appear multiple times. Aggregate to avoid double-counting.
 
 ================================================================================
 QUERY: "{original_query}"
-ANSWER ABOUT: {query_topic}
+TOPIC: {query_topic}
 ================================================================================
 
-TECHNIQUES:
+CORE TECHNIQUES:
 
-FUZZY MATCH (always use):
-  df['Student Name'].str.contains('Leslie', case=False, na=False)
-  df['Course Title'].str.contains('Business.*Math', case=False, regex=True, na=False)
+1. FUZZY NAME MATCHING (required for all student queries):
+   df['Student Name'].str.contains('FirstName', case=False, na=False)
+   df['Student Name'].str.contains('First.*Last', case=False, regex=True, na=False)
+   
+   Why: Names may have middle names, typos, or partial matches.
 
-TERM FILTER:
-  df['Term'].str.contains('Fall', case=False, na=False) & df['Term'].str.contains('2024', na=False)
+2. COURSE DATA (check BOTH columns):
+   title_courses = df[filter]['Course Title'].dropna().unique().tolist()
+   number_courses = df[filter].get('Course Number', pd.Series()).dropna().unique().tolist()
+   all_courses = list(set(title_courses + number_courses))
+   
+   Why: Course data may be in either/both columns.
 
-GPA (always filter > 0):
-  Career: df[df['GPA'] > 0]['GPA'].max()
-  Average: df[df['GPA'] > 0].groupby('Student Name')['GPA'].max().mean()
+3. GPA CALCULATIONS (always filter > 0):
+   Career GPA: df[df['GPA'] > 0]['GPA'].max()
+   Average: df[df['GPA'] > 0].groupby('Student Name')['GPA'].max().mean()
+   
+   Why: 0.00 GPA often means "not set" or transfer credits.
 
-RANK:
-  df[df['GPA'] > 0].groupby('Student Name')['GPA'].max().sort_values(ascending=False).head(5)
-
-COURSE QUERIES (check both columns):
-  courses_title = df[filter]['Course Title'].dropna().unique().tolist()
-  courses_number = df[filter]['Course Number'].dropna().unique().tolist() if 'Course Number' in df.columns else []
-  all_courses = list(set(courses_title + courses_number))
+4. RANKING/AGGREGATION:
+   df[df['GPA'] > 0].groupby('Student Name')['GPA'].max().sort_values(ascending=False).head(N)
+   
+   Why: Group by student first, then rank.
 
 ================================================================================
-EXAMPLES
+EXAMPLES (GENERALIZABLE PATTERNS)
 ================================================================================
 
-Q: "What is Trista Barrett's GPA?"
-Code: df[df['Student Name'].str.contains('Trista.*Barrett', case=False, regex=True, na=False)][df['GPA'] > 0]['GPA'].max()
+Pattern: "What is [STUDENT_NAME]'s GPA?"
+Code: df[df['Student Name'].str.contains('FirstName.*LastName', case=False, regex=True, na=False) & (df['GPA'] > 0)]['GPA'].max()
+Works for: ANY student name (Trista Barrett, Joshua Gaitan, Leslie Bright, etc.)
 
-Q: "What courses is Leslie enrolled in?"
+Pattern: "What courses is [STUDENT_NAME] enrolled in?"
 Code:
-filter = df['Student Name'].str.contains('Leslie', case=False, na=False)
-list(set(df[filter]['Course Title'].dropna().unique().tolist() + df[filter].get('Course Number', pd.Series()).dropna().unique().tolist()))
+filter = df['Student Name'].str.contains('FirstName', case=False, na=False)
+titles = df[filter]['Course Title'].dropna().unique().tolist()
+numbers = df[filter].get('Course Number', pd.Series()).dropna().unique().tolist()
+list(set(titles + numbers))
+Works for: ANY student name
 
-Q: "Top 5 students by GPA"
-Code: df[df['GPA'] > 0].groupby('Student Name')['GPA'].max().sort_values(ascending=False).head(5)
+Pattern: "Top N students by GPA"
+Code: df[df['GPA'] > 0].groupby('Student Name')['GPA'].max().sort_values(ascending=False).head(N)
+Works for: ANY number (5, 10, 20, etc.)
+
+Pattern: "Students in [COURSE_NAME]"
+Code: df[df['Course Title'].str.contains('CourseName', case=False, regex=True, na=False)]['Student Name'].unique().tolist()
+Works for: ANY course name
 
 ================================================================================
-EXECUTION PROTOCOL (CRITICAL - DO NOT VIOLATE)
+EXECUTION RULES (CRITICAL)
 ================================================================================
-1. Write ONE aggregated code statement that gets the full answer
-2. Execute EXACTLY ONCE
-3. Take result AS-IS
-4. Format and respond immediately, NO LaTeX notation (dollar signs, boxed, etc.)
-5. STOP - DO NOT make additional tool calls
 
-VIOLATION EXAMPLES (NEVER DO THIS):
-❌ Checking each student individually in a loop
-❌ Re-running code to verify
-❌ Making multiple queries when one would work
+1. Write ONE code statement covering the full query
+2. Execute ONCE (do NOT re-run to verify)
+3. Take the result AS-IS (trust pandas output)
+4. Format in NATURAL LANGUAGE (NOT raw Python):
+   Lists → "Student is enrolled in:\n- Item1\n- Item2"
+   Numbers → "Student's GPA is X.XX"
+5. STOP immediately after formatting
 
-CORRECT APPROACH:
-✅ Use groupby/sort/head to get answer in ONE execution
-✅ Trust the pandas result
-✅ Respond immediately
+WRONG ❌:
+- Loop through students individually (use groupby instead)
+- Create fake DataFrame: df = pd.DataFrame({{"name": ["test"]}})
+- Re-execute working code to "double-check"
+- Mix topics (if asked GPA, don't add courses)
 
-Example: "Highest GPA student"
-WRONG: Check each student (10 calls) ❌
-RIGHT: df.groupby('Student Name')['GPA'].max().idxmax() (1 call) ✅
-
-If query asks for GPA → Return ONLY GPA
-If query asks for courses → Return ONLY courses
-DO NOT mix topics.
+RIGHT ✅:
+- ONE aggregated statement with groupby/filter
+- Use pre-loaded 'df' directly
+- Respond with result immediately
+- Stay on topic: {query_topic}
 
 Query hints: {query_hints}
 
-ALWAYS:
-- Use .str.contains (fuzzy matching)
-- Filter GPA > 0 before calculations
-- Use .dropna() for text columns
-- Group by student for aggregations
-- Accept first valid result
+ALWAYS use: .str.contains() (fuzzy), .dropna(), groupby, GPA > 0 filter
+NEVER use: == (exact match), re-execution, fake data
 
-NEVER:
-- Use exact matching (==)
-- Re-execute valid results
-- Add information not requested
-
-Now solve: Write code, execute ONCE, format, respond.
+Solve now: Write code, execute ONCE, format, respond.
 """
 
 
