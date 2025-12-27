@@ -119,6 +119,8 @@ class RAGPipeline:
         groq_key = self.settings.groq_api_key or os.getenv("GROQ_API_KEY")
         if not groq_key:
             raise ValueError("No Groq API key")
+        
+        logger.info(f"[Groq] Model: {self.settings.groq_model}, Prompt size: {len(prompt)} chars")
             
         url = "https://api.groq.com/openai/v1/chat/completions"
         payload = {

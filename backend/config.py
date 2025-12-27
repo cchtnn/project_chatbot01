@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     ollama_timeout: int = Field(default=120, env="OLLAMA_TIMEOUT")
 
     groq_api_key: Optional[str] = Field(default=None, env="GROQ_API_KEY")
-    groq_model: str = Field(default="mixtral-8x7b-32768", env="GROQ_MODEL")
+    groq_model: str = Field(default="llama-3.3-70b-versatile", env="GROQ_MODEL")
 
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-3.5-turbo", env="OPENAI_MODEL")

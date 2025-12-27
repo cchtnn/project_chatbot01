@@ -408,14 +408,20 @@ class Orchestrator:
     
     def _route_query(self, query: str) -> Tuple[str, float, str]:
         """
-        3-Layer Conservative Routing with bias protection.
+        HYBRID ROUTING: LLM Description-Based + Semantic Validation
+        
+        Architecture:
+        - Layer 0: Fast heuristics (< 1ms) - explicit markers
+        - Layer 1: LLM with tool descriptions (150ms) - PRIMARY, understands intent
+        - Layer 2: Semantic router (80ms) - VALIDATION
+        - Layer 3: Parallel execution (400ms) - disagreement resolution
         
         Returns: (tool_name, confidence, routing_source)
         """
         q_norm = query.lower()
         
         # =================================================================
-        # LAYER 0: Explicit Format Markers (Optional, < 1ms)
+        # LAYER 0: Explicit Format Markers (< 1ms)
         # =================================================================
         
         # Payroll code format (p01, p05, etc.)
@@ -429,63 +435,80 @@ class Orchestrator:
             return ("BorPlannerTool", 1.0, "explicit_phrase")
         
         # =================================================================
-        # LAYER 1: Semantic Router (Candidate Generator, 50-100ms)
+        # LAYER 1: LLM Description-Based Routing (PRIMARY - 150ms)
         # =================================================================
         
-        if not self.semantic_router or not self.semantic_router.model:
-            # Fallback if semantic router unavailable
-            logger.warning("[Routing] Semantic router unavailable --> GenericRagTool")
-            return ("GenericRagTool", 0.3, "no_semantic_router")
-        
-        candidates = self.semantic_router.get_top_k_candidates(query, k=2)
-        
-        if not candidates or candidates[0][1] < 0.50:
-            logger.info("[Routing] All scores < 0.50 --> GenericRagTool fallback")
-            return ("GenericRagTool", 0.3, "low_confidence_fallback")
-        
-        tool1, score1 = candidates[0]
-        tool2, score2 = candidates[1] if len(candidates) > 1 else (None, 0.0)
-        margin = score1 - score2
-        
-        logger.info(
-            f"[Routing] Candidates: {tool1}={score1:.3f}, "
-            f"{tool2}={score2:.3f}, margin={margin:.3f}"
-        )
+        llm_tool, llm_conf = self._llm_description_route(query)
         
         # =================================================================
-        # LAYER 2: Conservative Decision with Parallel Protection
+        # LAYER 2: Semantic Router (VALIDATION - 80ms)
         # =================================================================
         
-        # High confidence + clear gap --> Safe to route
-        if score1 >= 0.85 and margin >= 0.20:
+        semantic_candidates = []
+        sem_tool, sem_conf = None, 0.0
+        
+        if self.semantic_router and self.semantic_router.model:
+            semantic_candidates = self.semantic_router.get_top_k_candidates(query, k=2)
+            
+            if semantic_candidates and semantic_candidates[0][1] >= 0.50:
+                sem_tool, sem_conf = semantic_candidates[0]
+                logger.info(f"[Semantic] Top: {sem_tool}={sem_conf:.3f}")
+            else:
+                logger.info("[Semantic] All scores < 0.50")
+        else:
+            logger.warning("[Semantic] Router unavailable")
+        
+        # =================================================================
+        # DECISION LOGIC: Combine LLM + Semantic
+        # =================================================================
+        
+        # Case 1: LLM high confidence + Semantic agrees
+        if llm_tool and llm_conf >= 0.75 and llm_tool == sem_tool:
+            logger.info(f"[Route] LLM + Semantic agree ({llm_conf:.2f}) --> {llm_tool}")
+            return (llm_tool, max(llm_conf, sem_conf), "llm_semantic_agree")
+        
+        # Case 2: LLM very confident (trust it even if semantic disagrees)
+        if llm_tool and llm_conf >= 0.85:
+            logger.info(f"[Route] LLM very confident ({llm_conf:.2f}) --> {llm_tool}")
+            if sem_tool and sem_tool != llm_tool:
+                logger.info(f"[Route] Overriding semantic ({sem_tool})")
+            return (llm_tool, llm_conf, "llm_high_confidence")
+        
+        # Case 3: Semantic confident + LLM agrees or absent
+        if sem_tool and sem_conf >= 0.70 and (not llm_tool or llm_tool == sem_tool):
+            logger.info(f"[Route] Semantic confident ({sem_conf:.2f}) --> {sem_tool}")
+            return (sem_tool, sem_conf, "semantic_confident")
+        
+        # Case 4: DISAGREEMENT - Run parallel to resolve
+        if llm_tool and sem_tool and llm_tool != sem_tool:
             logger.info(
-                f"[Routing] High confidence + clear gap --> {tool1}"
-            )
-            return (tool1, score1, "direct_high_confidence")
-        
-        # Close contest OR uncertain --> PARALLEL (bias protection)
-        if tool2 and margin < 0.20:
-            logger.info(
-                f"[Routing] Close contest (margin={margin:.3f}) --> "
-                f"PARALLEL execution to avoid bias"
+                f"[Route] LLM vs Semantic disagreement: {llm_tool}({llm_conf:.2f}) "
+                f"vs {sem_tool}({sem_conf:.2f}) --> PARALLEL"
             )
             
             try:
-                selected_tool, result = self._execute_parallel_with_judge(
-                    query, 
-                    candidates[:2]
-                )
+                candidates = [(llm_tool, llm_conf), (sem_tool, sem_conf)]
+                selected_tool, result = self._execute_parallel_with_judge(query, candidates)
                 self._cached_parallel_result = result
-                return (selected_tool, 0.85, "parallel_judge")
-                
+                return (selected_tool, 0.85, "parallel_disagreement")
             except Exception as e:
-                logger.error(f"[Routing] Parallel execution failed: {e}")
-                return (tool1, score1, "parallel_failed_fallback")
+                logger.error(f"[Route] Parallel failed: {e}, using LLM decision")
+                return (llm_tool or sem_tool, 0.70, "parallel_failed")
         
-        # Medium confidence with reasonable gap
-        logger.info(f"[Routing] Medium confidence --> {tool1}")
-        return (tool1, max(0.70, score1), "direct_medium_confidence")
-    
+        # Case 5: LLM medium confidence, no semantic validation
+        if llm_tool and llm_conf >= 0.60:
+            logger.info(f"[Route] LLM medium confidence ({llm_conf:.2f}) --> {llm_tool}")
+            return (llm_tool, llm_conf, "llm_medium_confidence")
+        
+        # Case 6: Only semantic has answer (LLM failed)
+        if sem_tool:
+            logger.info(f"[Route] LLM unavailable, using semantic --> {sem_tool}")
+            return (sem_tool, sem_conf, "semantic_fallback")
+        
+        # Case 7: Both failed - fallback to GenericRagTool
+        logger.warning("[Route] Both LLM and Semantic uncertain --> GenericRagTool fallback")
+        return ("GenericRagTool", 0.30, "low_confidence_fallback")
+
     def _execute_parallel_with_judge(
         self, 
         query: str, 
@@ -579,3 +602,76 @@ Which answer is more relevant and accurate? Respond with ONLY: A or B
     def get_routing_metrics(self) -> Dict[str, Any]:
         """Get routing performance metrics."""
         return self.feedback.get_metrics()
+
+    def _llm_description_route(self, query: str) -> Tuple[Optional[str], float]:
+        """
+        LLM-based routing using tool DESCRIPTIONS (not examples).
+        Understands query INTENT and matches to tool PURPOSE.
+        
+        This is the PRIMARY router - generalizes to any entity names.
+        """
+        
+        prompt = f"""You are a query routing expert. Analyze this query and determine which tool can answer it based on PURPOSE.
+
+Query: "{query}"
+
+Available Tools:
+
+1. **TranscriptTool**
+   Purpose: Handles questions about SPECIFIC STUDENT academic records - grades, GPA, courses taken by individual students, transcript data, enrollment status of named students in courses.
+   Key capability: Queries data about individual students by name.
+
+2. **PayrollTool**
+   Purpose: Handles payroll schedules, pay periods, check dates, payment processing dates.
+   Key capability: Payroll calendar and payment timing information.
+
+3. **BorPlannerTool**
+   Purpose: Handles Board of Regents meetings, committee schedules, governance events.
+   Key capability: Meeting schedules and board governance calendars.
+
+4. **GenericRagTool**
+   Purpose: Handles institutional policies, procedures, handbooks, general information, academic calendar, enrollment procedures (NOT individual student data).
+   Key capability: Policy documents and general institutional information.
+
+Task: Which tool's PURPOSE best matches this query's INTENT?
+
+Rules:
+- If query asks about a SPECIFIC STUDENT's data (GPA, courses, grades) --> TranscriptTool
+- If query asks about payroll dates/schedules --> PayrollTool
+- If query asks about board meetings --> BorPlannerTool
+- If query asks about policies/procedures/general info --> GenericRagTool
+
+Respond with JSON only (no explanation):
+{{"tool": "ToolName", "confidence": 0.85}}
+
+Where confidence: 0.90-1.0 = very clear, 0.75-0.89 = clear, 0.60-0.74 = probable, <0.60 = uncertain
+"""
+        
+        try:
+            # Use RAG pipeline's LLM
+            response = self.rag_pipeline._generate_answer("", prompt)
+            
+            # Parse JSON response
+            import json
+            # Extract JSON from response (handle if LLM adds extra text)
+            json_match = re.search(r'\{[^}]+\}', response)
+            if json_match:
+                result = json.loads(json_match.group(0))
+            else:
+                result = json.loads(response)
+            
+            tool = result.get("tool")
+            confidence = float(result.get("confidence", 0.0))
+            
+            # Validate tool exists
+            if tool in TOOL_MAP and confidence >= 0.60:
+                logger.info(f"[LLM Route] {tool} (conf={confidence:.2f})")
+                return (tool, confidence)
+            else:
+                logger.warning(f"[LLM Route] Invalid tool or low confidence: {tool}={confidence:.2f}")
+                return (None, 0.0)
+        
+        except Exception as e:
+            logger.error(f"[LLM Route] Failed: {e}")
+            return (None, 0.0)
+

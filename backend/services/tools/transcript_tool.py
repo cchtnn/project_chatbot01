@@ -290,7 +290,7 @@ EXECUTION PROTOCOL (CRITICAL - DO NOT VIOLATE)
 1. Write ONE aggregated code statement that gets the full answer
 2. Execute EXACTLY ONCE
 3. Take result AS-IS
-4. Format and respond immediately
+4. Format and respond immediately, NO LaTeX notation (dollar signs, boxed, etc.)
 5. STOP - DO NOT make additional tool calls
 
 VIOLATION EXAMPLES (NEVER DO THIS):
