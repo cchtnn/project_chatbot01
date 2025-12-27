@@ -197,7 +197,7 @@ async def query_endpoint(
         enriched_query = context_resolver.resolve(query, conversation_history)
         
         if enriched_query != query:
-            logger.info(f"[query] Context enriched: '{query}' → '{enriched_query}'")
+            logger.info(f"[query] Context enriched: '{query}' --> '{enriched_query}'")
         
         # Delegate to orchestrator WITH HISTORY
         request = OrchestratorRequest(
@@ -320,7 +320,7 @@ async def react_query(
         enriched_query = context_resolver.resolve(req.query, conversation_history)
         
         if enriched_query != req.query:
-            logger.info(f"[react-query] Context enriched: '{req.query}' → '{enriched_query}'")
+            logger.info(f"[react-query] Context enriched: '{req.query}' --> '{enriched_query}'")
 
         # Orchestrator call WITH HISTORY
         orch_request = OrchestratorRequest(

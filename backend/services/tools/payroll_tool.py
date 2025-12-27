@@ -244,7 +244,7 @@ def answer(question: str, params: Dict[str, Any] | None = None) -> ToolResult:
         )
 
     # ------------------------------------------------------------------
-    # EXISTING LOGIC 1: Period (start_date/end_date) → check date
+    # EXISTING LOGIC 1: Period (start_date/end_date) --> check date
     # ------------------------------------------------------------------
     if (start_date and end_date) or ("between" in q_lower and "check date" in q_lower):
         for col in ("start_date", "end_date", "check_date"):
@@ -272,7 +272,7 @@ def answer(question: str, params: Dict[str, Any] | None = None) -> ToolResult:
         for row in rows:
             explanation += (
                 f"- Payroll #{row.get('payroll_no', '')}: "
-                f"{row.get('start_date', '')}–{row.get('end_date', '')} → "
+                f"{row.get('start_date', '')}–{row.get('end_date', '')} --> "
                 f"check date {row.get('check_date', '')}\n"
             )
 
@@ -285,7 +285,7 @@ def answer(question: str, params: Dict[str, Any] | None = None) -> ToolResult:
         )
 
     # ------------------------------------------------------------------
-    # EXISTING LOGIC 2: Check date → period
+    # EXISTING LOGIC 2: Check date --> period
     # ------------------------------------------------------------------
     if check_date or ("check date" in q_lower and "payroll period" in q_lower):
         for col in ("start_date", "end_date", "check_date"):
@@ -364,7 +364,7 @@ def answer(question: str, params: Dict[str, Any] | None = None) -> ToolResult:
         )
 
     # ------------------------------------------------------------------
-    # Fallback → dataframe agent
+    # Fallback --> dataframe agent
     # ------------------------------------------------------------------
     df_answer = run_df_agent(question, df_work, df_name="payroll calendar")
     return ToolResult(

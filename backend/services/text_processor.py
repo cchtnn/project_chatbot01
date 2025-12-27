@@ -46,7 +46,7 @@ class TextProcessor:
 
     def process_document(self, parsed_doc: ParsedDocument) -> List[TextChunk]:
         """
-        Main entry point: ParsedDocument → List[TextChunk].
+        Main entry point: ParsedDocument --> List[TextChunk].
         
         Args:
             parsed_doc: Output from DocumentParser
@@ -87,7 +87,7 @@ class TextProcessor:
             return self._fixed_size_chunking(parsed_doc, content)
 
     def _semantic_chunking(self, parsed_doc: ParsedDocument, content: List[str]) -> List[TextChunk]:
-        """Chunk on semantic boundaries (paragraphs → sentences)."""
+        """Chunk on semantic boundaries (paragraphs --> sentences)."""
         chunks = []
         current_chunk = ""
         current_page = None
@@ -107,7 +107,7 @@ class TextProcessor:
                     
                 # Add to current chunk
                 if len(current_chunk) + len(sentence) > self.chunk_size:
-                    # Chunk full → save
+                    # Chunk full --> save
                     if len(current_chunk) >= self.min_chunk_size:
                         chunks.append(self._create_chunk(current_chunk, len(chunks), len(content), 
                                                         parsed_doc, current_page))

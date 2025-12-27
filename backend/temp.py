@@ -72,7 +72,7 @@ def inspect_calendar_chunks():
             f.write("="*80 + "\n\n")
             f.write(doc)
         
-        print(f"Chunk {i:3d} | Page {page:3s} | {len(doc):5d} chars → {filepath}")
+        print(f"Chunk {i:3d} | Page {page:3s} | {len(doc):5d} chars --> {filepath}")
     
     print(f"\n✅ Saved {len(calendar_chunks)} chunks to {temp_dir}/ folder")
 

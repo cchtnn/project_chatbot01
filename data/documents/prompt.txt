@@ -171,9 +171,9 @@ When filtering students by institution (e.g., "students from Murray State Colleg
 5. 0.00 if no valid GPA data found
 
 GPA Extraction Patterns:
-- "Career Totals:\n  - GPA: 3.30" → 3.30
-- "Division Career Totals: 45.00 42.00 42.00 156.00 3.71" → 3.71
-- "Term Totals: GPA: 2.35" → 2.35
+- "Career Totals:\n  - GPA: 3.30" --> 3.30
+- "Division Career Totals: 45.00 42.00 42.00 156.00 3.71" --> 3.71
+- "Term Totals: GPA: 2.35" --> 2.35
 
 ---
 

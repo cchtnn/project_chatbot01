@@ -13,7 +13,7 @@ Uses ONLY open-source packages:
 - unidecode (UNIVERSAL OCR cleanup)
 
 Key fixes vs original:
-✓ PDF → Image conversion BEFORE OCR (was passing PDF directly to EasyOCR)
+✓ PDF --> Image conversion BEFORE OCR (was passing PDF directly to EasyOCR)
 ✓ Tesseract OCR primary (3x faster than EasyOCR)
 ✓ Scanned PDF auto-detection
 ✓ Confidence scoring and quality gates
@@ -24,7 +24,7 @@ Key fixes vs original:
 """
 import os
 import re
-import numpy as np  # For EasyOCR PIL→numpy conversion
+import numpy as np  # For EasyOCR PIL-->numpy conversion
 import pytesseract
 from unidecode import unidecode  # NEW: Universal OCR cleanup
 
@@ -171,7 +171,7 @@ class DocumentParser:
                 important_phrases.append(context.group(0))
         
         # 🧠 L2: Remove artifacts BUT KEEP NUMBERS
-        text = re.sub(r'\.0+\.0+', '', text)  # ..0.00.004 → ""
+        text = re.sub(r'\.0+\.0+', '', text)  # ..0.00.004 --> ""
         text = re.sub(r'NCOy', 'NCO', text, flags=re.IGNORECASE)
         text = re.sub(r'0c\s*OB', '', text)
         
@@ -195,7 +195,7 @@ class DocumentParser:
             logger.debug(f"QUALITY {quality_score:.0f}: {text[:60]}...")
             return text.strip()
         
-        # Final check: If contains preserved numbers → KEEP
+        # Final check: If contains preserved numbers --> KEEP
         if any(phrase.lower() in text.lower() for phrase in important_phrases):
             logger.debug(f" NUMBER PRESERVED: {important_phrases}")
             return text.strip()
@@ -276,7 +276,7 @@ class DocumentParser:
         return parsers.get(doc_type, self._parse_text)(file_path)
 
     # =========================================================================
-    # PDF: FIXED PIPELINE - pdfplumber → tabula → PDF2Image → Tesseract/EasyOCR
+    # PDF: FIXED PIPELINE - pdfplumber --> tabula --> PDF2Image --> Tesseract/EasyOCR
     # =========================================================================
     def _parse_pdf(self, file_path: Path) -> Optional[ParsedDocument]:
         """
@@ -284,8 +284,8 @@ class DocumentParser:
         1. pdfplumber (text + tables) - FAST
         2. tabula (tables) - PARALLEL
         3. Scanned PDF detection
-        4. pdf2image → pytesseract (CPU OCR) - PRIMARY
-        5. pdf2image → easyocr (GPU OCR) - FALLBACK
+        4. pdf2image --> pytesseract (CPU OCR) - PRIMARY
+        5. pdf2image --> easyocr (GPU OCR) - FALLBACK
         """
         content = []
         pages = []
@@ -419,7 +419,7 @@ class DocumentParser:
             if reader:
                 try:
                     for page_num, image in enumerate(images, 1):
-                        image_np = np.array(image)  # CRITICAL: PIL → numpy
+                        image_np = np.array(image)  # CRITICAL: PIL --> numpy
                         results = reader.readtext(image_np)  # numpy array WORKS
                         text = " ".join([result[1] for result in results if result[1]])
                         clean_text = self._clean_extracted_text(text.strip())  # CLEAN IMMEDIATELY
@@ -490,7 +490,7 @@ class DocumentParser:
     # SIMPLE FORMATS
     # =========================================================================
     def _parse_csv(self, file_path: Path) -> Optional[ParsedDocument]:
-        """CSV → markdown."""
+        """CSV --> markdown."""
         try:
             df = pd.read_csv(file_path)
             content = [df.to_markdown(index=False)]
@@ -507,7 +507,7 @@ class DocumentParser:
             return self._parse_text(file_path)
 
     def _parse_json(self, file_path: Path) -> Optional[ParsedDocument]:
-        """JSON → formatted text."""
+        """JSON --> formatted text."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -525,7 +525,7 @@ class DocumentParser:
             return self._parse_text(file_path)
 
     def _parse_excel(self, file_path: Path) -> Optional[ParsedDocument]:
-        """XLSX → markdown tables."""
+        """XLSX --> markdown tables."""
         try:
             xl = pd.ExcelFile(file_path)
             content = []
@@ -620,7 +620,7 @@ class DocumentParser:
     # HELPERS
     # =========================================================================
     def _docx_table_to_md(self, table) -> str:
-        """DOCX table → markdown."""
+        """DOCX table --> markdown."""
         rows = []
         for row in table.rows:
             cells = [cell.text.strip() for cell in row.cells]

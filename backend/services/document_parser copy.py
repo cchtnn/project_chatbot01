@@ -132,7 +132,7 @@ class DocumentParser:
         return parsers.get(doc_type, self._parse_text)(file_path)
 
     # =========================================================================
-    # PDF: pdfplumber → tabula → OCR
+    # PDF: pdfplumber --> tabula --> OCR
     # =========================================================================
     def _parse_pdf(self, file_path: Path) -> Optional[ParsedDocument]:
         """PDF: text + tables + OCR fallback."""
@@ -292,7 +292,7 @@ class DocumentParser:
     # HELPERS
     # =========================================================================
     def _docx_table_to_md(self, table) -> str:
-        """DOCX table → markdown."""
+        """DOCX table --> markdown."""
         rows = []
         for row in table.rows:
             cells = [cell.text.strip() for cell in row.cells]

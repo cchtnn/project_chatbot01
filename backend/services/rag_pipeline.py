@@ -85,7 +85,7 @@ class TableAgent:
                         logger.debug(f"Markdown table parse failed: {e}")
 
             # ─────────────────────────────────────────
-            # 2) JSON → TABLE (KEEP THIS LOGIC)
+            # 2) JSON --> TABLE (KEEP THIS LOGIC)
             # ─────────────────────────────────────────
             text = content.strip()
             if text.startswith('[') or text.startswith('{'):

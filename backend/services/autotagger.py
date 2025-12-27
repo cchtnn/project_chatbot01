@@ -2,7 +2,7 @@
 Enterprise AutoTagger - LLM-powered document classification.
 
 Extracts domain, type, keywords from full document context (not chunks).
-Tags ONCE per document → stored in ChromaDB metadata → fast filtering.
+Tags ONCE per document --> stored in ChromaDB metadata --> fast filtering.
 """
 
 import logging

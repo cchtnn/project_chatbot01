@@ -11,8 +11,8 @@ from models.schemas import ToolResult
 logger = get_logger(__name__)
 
 def normalize_distance(raw_distance: float) -> float:
-    """FIXED: Proper L2 → Cosine for your scores."""
-    # Your scores: 0.0-0.699 range → scale properly
+    """FIXED: Proper L2 --> Cosine for your scores."""
+    # Your scores: 0.0-0.699 range --> scale properly
     if raw_distance <= 0.7:
         return 0.85  # Excellent match
     elif raw_distance <= 5.0:

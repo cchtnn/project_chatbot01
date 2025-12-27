@@ -133,7 +133,7 @@ def add_message(session_id: int, question: str, answer: str) -> None:
 
 def get_history(session_id: int) -> List[Tuple[str, str]]:
     """
-    FIXED: Changed created_at → createdat to match ChatMessage model
+    FIXED: Changed created_at --> createdat to match ChatMessage model
     """
     db = get_db()
     try:
@@ -162,7 +162,7 @@ def count_messages(session_id: int) -> int:
 
 def rename_session(session_id: int, new_name: str) -> None:
     """
-    FIXED: Changed session_name → sessionname to match ChatSession model
+    FIXED: Changed session_name --> sessionname to match ChatSession model
     """
     db = get_db()
     try:

@@ -74,11 +74,11 @@ class HybridRetriever:
         Universal high-quality retrieval pipeline.
         
         Flow:
-        1. Hybrid search (vector + BM25) → Over-fetch candidates
-        2. Reciprocal rank fusion → Merge results
-        3. Cross-encoder re-rank → Score relevance
-        4. Relevance filtering → Remove low-quality (score < 0.35)
-        5. Source diversity → Max 2 chunks per document
+        1. Hybrid search (vector + BM25) --> Over-fetch candidates
+        2. Reciprocal rank fusion --> Merge results
+        3. Cross-encoder re-rank --> Score relevance
+        4. Relevance filtering --> Remove low-quality (score < 0.35)
+        5. Source diversity --> Max 2 chunks per document
         6. Return top_k high-quality, diverse chunks
         """
         
@@ -244,8 +244,8 @@ class HybridRetriever:
         ADAPTIVE source diversity enforcement.
         
         Logic:
-        - If top chunks are from SAME source with HIGH scores → Allow up to 4 chunks (sequential data)
-        - If top chunks are from DIFFERENT sources → Enforce strict limit (2 per source)
+        - If top chunks are from SAME source with HIGH scores --> Allow up to 4 chunks (sequential data)
+        - If top chunks are from DIFFERENT sources --> Enforce strict limit (2 per source)
         
         This handles cases like calendars where data spans multiple sequential pages.
         """
@@ -258,7 +258,7 @@ class HybridRetriever:
         dominant_count = top_sources.count(dominant_source)
         
         # ADAPTIVE: If top results are dominated by ONE source (3+ out of 5)
-        # AND they have high scores → Likely sequential/related content
+        # AND they have high scores --> Likely sequential/related content
         if dominant_count >= 3:
             avg_top_score = np.mean([r.score for r in results[:5]])
             
@@ -268,7 +268,7 @@ class HybridRetriever:
                 logger.info(
                     f"[Retriever] Adaptive diversity: {dominant_source} dominates "
                     f"({dominant_count}/5 top results, avg_score={avg_top_score:.2f}) "
-                    f"→ Allowing up to {adaptive_max} chunks (likely sequential data)"
+                    f"--> Allowing up to {adaptive_max} chunks (likely sequential data)"
                 )
             else:
                 # Medium relaxation
@@ -277,7 +277,7 @@ class HybridRetriever:
                     f"[Retriever] Adaptive diversity: Allowing up to {adaptive_max} chunks from {dominant_source}"
                 )
         else:
-            # STRICT: Multiple sources competing → Enforce diversity
+            # STRICT: Multiple sources competing --> Enforce diversity
             adaptive_max = max_per_source
             logger.info(f"[Retriever] Strict diversity: Max {adaptive_max} chunks per source")
         
