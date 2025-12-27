@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-import requests
 import os
 import logging
 import re
@@ -12,9 +11,11 @@ from io import StringIO
 from core import get_logger
 from db import ChromaDBManager
 from services import DocumentParser, TextProcessor, AutoTagger
+from services.llm_factory import get_llm  # ← ADDED
 from config import get_settings
 
 logger = get_logger(__name__)
+
 
 class QueryRouter:
     """Generic query classification for all document types."""
@@ -44,6 +45,7 @@ class QueryRouter:
             scores[qtype] = score
         
         return max(scores, key=scores.get)
+
 
 class TableAgent:
     """Generic table/CSV/JSON agent - ALL formats."""
@@ -114,53 +116,8 @@ class RAGPipeline:
         self.settings = get_settings()
         logger.info("Enterprise RAG v2.0 ready - Multi-Modal")
 
-    def _call_groq(self, prompt: str) -> str:
-        """Groq API client."""
-        groq_key = self.settings.groq_api_key or os.getenv("GROQ_API_KEY")
-        if not groq_key:
-            raise ValueError("No Groq API key")
-        
-        logger.info(f"[Groq] Model: {self.settings.groq_model}, Prompt size: {len(prompt)} chars")
-            
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        payload = {
-            "model": self.settings.groq_model,
-            "messages": [
-                {"role": "system", "content": "Answer ONLY using provided context. Be precise with dates/numbers. If insufficient info, say so."},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": self.settings.llm_max_tokens,
-            "temperature": 0.1  # Lower for factual accuracy
-        }
-        headers = {"Authorization": f"Bearer {groq_key}"}
-        resp = requests.post(url, json=payload, headers=headers, timeout=30)
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
-    # Keep your existing _call_ollama unchanged
-    def _call_ollama(self, prompt: str) -> str:
-        base_url = self.settings.ollama_base_url.rstrip("/")
-        model = self.settings.ollama_model
-        
-        for endpoint, payload in [
-            (f"{base_url}/api/generate", {"model": model, "prompt": prompt, "stream": False}),
-            (f"{base_url}/api/chat", {
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False
-            })
-        ]:
-            try:
-                resp = requests.post(endpoint, json=payload, timeout=self.settings.ollama_timeout)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return data.get("response") or data.get("message", {}).get("content", "")
-            except:
-                continue
-        raise Exception("Both Ollama endpoints failed")
-
     def _generate_answer(self, context: str, question: str) -> str:
-        """Generate a concise, professional answer grounded strictly in context."""
+        """Generate answer using centralized LLM factory with rotation."""
         prompt = f"""You are a professional assistant answering questions strictly from the provided context.
 
 CONTEXT:
@@ -180,28 +137,19 @@ GUIDELINES:
 
 ANSWER:
 """
-
-        # Multi-provider with temp=0.1 for factual answers
-        providers = []
-        if self.settings.llm_provider == "groq" and self.settings.groq_api_key:
-            providers.append(self._call_groq)
-        elif self.settings.llm_provider == "ollama":
-            providers.append(self._call_ollama)
-
-        # Optional extra Groq fallback via env
-        if os.getenv("GROQ_API_KEY"):
-            providers.append(self._call_groq)
-
-        # Always consider local Ollama as an additional fallback
-        providers.append(self._call_ollama)
-
-        for provider in providers:
-            try:
-                return provider(prompt).strip()
-            except Exception as e:
-                logger.warning(f"{provider.__name__} failed: {e}")
-
-        return "LLM unavailable"
+        
+        try:
+            # Use centralized factory with rotation
+            llm = get_llm(temperature=0.1)
+            
+            from langchain_core.messages import HumanMessage
+            response = llm.invoke([HumanMessage(content=prompt)])
+            
+            return response.content.strip()
+            
+        except Exception as e:
+            logger.error(f"[RAGPipeline] LLM generation failed: {e}")
+            return "LLM unavailable"
     
     def ingest_documents(self, doc_paths: List[str]) -> Dict[str, int]:
         """Enhanced ingest with full metadata."""

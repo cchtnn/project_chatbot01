@@ -5,34 +5,39 @@ import sys
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
-# 2) Import the REAL logger helpers from core (__init__ re-exports them)
-from core import initlogger, get_logger
+# 2) Import helpers
+from core import init_logger, get_logger
+from config import get_settings  # ✅ ADD THIS
 
-# Initialize global logger BEFORE importing services
+# Initialize logger
 init_logger()
 logger = get_logger(__name__)
 
-# 3) Now safely import RAGPipeline (which imports services/document_parser)
+# 3) Import RAGPipeline
 from services.rag_pipeline import RAGPipeline
 
-
 def main():
-    docs_root = Path(r"D:\jericho\data\documents")
+    # ✅ FLEXIBLE PATH - reads from .env
+    settings = get_settings()
+    docs_root = settings.documentsdir
+    
+    # Auto-create directory if missing
+    if not docs_root.exists():
+        docs_root.mkdir(parents=True, exist_ok=True)
+        logger.warning(f"Created documents directory: {docs_root}")
+    
+    # Find all files
     paths = [str(p) for p in docs_root.rglob("*") if p.is_file()]
     logger.info(f"Found {len(paths)} files to ingest under {docs_root}")
-
+    
+    if not paths:
+        logger.error(f"No files found in {docs_root}. Please add documents first.")
+        return
+    
+    # Ingest
     rag = RAGPipeline()
     stats = rag.ingest_documents(paths)
-    print("=== RAW CHUNK DEBUG ===")
-    collection = chroma_client.get_collection("jericho_kb")
-    sample_chunks = collection.get(limit=3, include=["documents"])
-    for i, chunk in enumerate(sample_chunks["documents"]):
-        if "cccscsc" in chunk.lower():
-            print(f"❌ DIRTY CHUNK {i}: {chunk[:200]}...")
-        else:
-            print(f"✅ CLEAN CHUNK {i}: {chunk[:100]}...")
     logger.info(f"INGEST STATS: {stats}")
-
 
 if __name__ == "__main__":
     main()

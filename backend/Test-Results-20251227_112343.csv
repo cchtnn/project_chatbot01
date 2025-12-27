@@ -1,0 +1,90 @@
+﻿domain,question,Generated Answer,Sources,Confidence,Tools Used,Status,Error,Timestamp
+TRANSCRIPT,Give me the GPA details of Trista Barrett.,Trista Barrett's GPA is 4.0.,N/A,0.88,TranscriptTool,SUCCESS,,2025-12-27 11:23:58
+TRANSCRIPT,Tell me the courses which Joshua Don Gaitan has enrolled?,"Joshua Don Gaitan is enrolled in:
+- Intro to Criminal Justice (Online)
+- Canoe Camping
+- Lifetime Fitness & Wellness-Mind/
+- Formation
+- Introductory Chemistry
+- History of World Civilization II
+- Varsity Powerlifting
+- Biblical Literature
+- First-Year Experience
+- Principles of Nutrition (Online)
+- College Writing I
+- Topics in Film:Gothic (Online)
+- Art and the Human Experience
+- Elementary Statistics
+- Yoga
+- Elementary Algebra
+- World Literature (Online)
+- Introduction to Biology",N/A,0.88,TranscriptTool,SUCCESS,,2025-12-27 11:24:05
+PAYROLL_CALENDAR,When is the check date for payroll period between 01/03/2026 to 01/16/2026?,No payroll period found between N/A and N/A in the payroll calendar.,N/A,0.4,PayrollTool,SUCCESS,,2025-12-27 11:24:11
+PAYROLL_CALENDAR,What is the payroll period where check date is 2/6/2026?,"For the requested check date, the payroll period(s) are:
+- Payroll #2: 2026-01-17–2026-01-30 (check date 2026-02-06)",N/A,0.95,PayrollTool,SUCCESS,,2025-12-27 11:24:16
+PAYROLL_CALENDAR,How many payroll periods do we have in 2026?,There are 26 payroll periods in 2026.,N/A,0.9,PayrollTool,SUCCESS,,2025-12-27 11:24:22
+BOR_PLANNER,When is the next Board of Regents meeting?,"The next Board of Regents meeting is scheduled for Nov 14, 2025.",N/A,0.85,BorPlannerTool,SUCCESS,,2025-12-27 11:24:33
+BOR_PLANNER,Give me the BOR meeting schedule for this year.,LLM unavailable,N/A,0.85,BorPlannerTool,SUCCESS,,2025-12-27 11:24:46
+BOR_PLANNER,When is the Finance/Audit/Investment Committee meeting?,"The Finance/Audit/Investment Committee meets at 9:00 a.m. on the 2nd Friday of alternating months (October, December, February, April, June, August).",N/A,0.85,BorPlannerTool,SUCCESS,,2025-12-27 11:24:55
+GENERIC RAG,What is the sick leave policy for full-time staff?,"Regular full-time employees are eligible to accrue sick leave hours from the date of employment. Eligible employees will accrue 4 hours of sick leave per pay period from the date of employment. If sick leave is exhausted, annual leave will be used in its place. Any unused sick leave will not be payable upon termination or resignation from employment. The maximum sick leave hours which may be accrued shall be 320 hours for administrators and staff. An employee will accrue sick leave when eighty (80) hours of compensation are paid for a pay period.",N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:25:18
+GENERIC_RAG,What are the health benefit plan options available to employees?,"The College provides a diversified package of insurance benefits including health, dental, vision, life, short term disability, and accidental death and dismemberment insurance.",N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:25:31
+GENERIC_RAG,What is the student code of conduct at Diné College?,"The student code of conduct at Diné College is outlined in the Student Code of Conduct Handbook, which can be obtained from any Diné College site or online at www.dinecollege.edu. It includes policies such as the Academic Integrity policy, Non-Discrimination Policy, Freedom of Speech, Expression, Press and Assemble Policy, Search and Seizure Policy, Drug Free Compliance Policy-Zero Tolerance Policy, and others. Adopted on August 16, 2008, and revised from June 21, 2017, through December 20, 2019.",N/A,0.75,GenericRagTool,SUCCESS,,2025-12-27 11:25:45
+GENERIC_RAG,What is the policy on travel and purchase approvals?,The documents do not contain information about this question.,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:25:56
+GENERIC_RAG,What are the housing rules in the Residence Life Handbook?,"Residents must: consider the needs of other residents, keep their unit, room, bathroom, and common areas clean, communicate with other residents and staff members, let other residents know when they are disruptive, support campus and individual safety, attend all MANDATORY meetings, accept responsibility for one's behavior at all times, and respect the rights of other individuals. Residents will be immediately evicted for any violent behavior.",N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:26:07
+GENERIC_RAG,What is the mission and vision of Diné College?,The mission of Diné College is to advance quality post-secondary student learning and development to ensure the well-being of the Dine People. The vision is to continuously improve programs and services to make Diné College the exemplary higher education institution for the Dine People.,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:26:18
+TRANSCRIPT,List student by their GPA,"The students listed by their GPA are:
+- Arnoldo Bernal Cavazos: 4.0
+- Blen Tadesse Bezuwork: 4.0
+- Joshua Don Gaitan: 4.0
+- Trista Denay Barrett: 4.0
+- Christian Haras Buchanan: 3.0
+- Leslie Nichole Bright: No GPA available",N/A,0.88,TranscriptTool,SUCCESS,,2025-12-27 11:26:24
+TRANSCRIPT,Student details with highest GPA,The student with the highest GPA is Arnoldo Bernal Cavazos with a GPA of 4.0.,N/A,0.88,TranscriptTool,SUCCESS,,2025-12-27 11:26:34
+TRANSCRIPT,What is the GAP for Leslie Bright,The student's GPA is NaN.,N/A,0.88,TranscriptTool,SUCCESS,,2025-12-27 11:26:58
+TRANSCRIPT,Display student by their GPA in Tabular format,"Here is the tabular format of students by their GPA:
+Student Name                 |   GPA
+-----------------------------|------
+Arnoldo Bernal Cavazos        |   4.0
+Blen Tadesse Bezuwork         |   4.0
+Joshua Don Gaitan             |   4.0
+Trista Denay Barrett          |   4.0
+Christian Haras Buchanan       |   3.0
+Leslie Nichole Bright         |   2.0",N/A,0.88,TranscriptTool,SUCCESS,,2025-12-27 11:27:23
+TRANSCRIPT,Student name with Highest GPA,"**Top 5 Students by GPA:**
+
+1. Arnoldo Bernal Cavazos: GPA 4.00
+2. Blen Tadesse Bezuwork: GPA 4.00
+3. Joshua Don Gaitan: GPA 4.00
+4. Trista Denay Barrett: GPA 4.00
+5. Christian Haras Buchanan: GPA 3.00
+",N/A,0.9,TranscriptTool,SUCCESS,,2025-12-27 11:27:30
+TRANSCRIPT,What is the GPA for Trista Denay Barrett in the term 2024-2025 Fall,Unable to process query. Please ensure LangChain is installed for advanced queries.,N/A,0.0,TranscriptTool,SUCCESS,,2025-12-27 11:27:35
+TRANSCRIPT,How many courses has Trista Barrett taken in 2024-2025 Fall Term,Unable to process query. Please ensure LangChain is installed for advanced queries.,N/A,0.0,TranscriptTool,SUCCESS,,2025-12-27 11:27:41
+TRANSCRIPT,Hours attended by Trista Denay Barrett in 2024-2025 Spring term,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:28:02
+TRANSCRIPT,What is the Average GPA of students for Fall 2024-2025 term,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:28:21
+TRANSCRIPT,List all students who have enrolled for the course Business Mathematics,"**Top 5 Students by GPA:**
+
+1. Arnoldo Bernal Cavazos: GPA 4.00
+2. Blen Tadesse Bezuwork: GPA 4.00
+3. Joshua Don Gaitan: GPA 4.00
+4. Trista Denay Barrett: GPA 4.00
+5. Christian Haras Buchanan: GPA 3.00
+",N/A,0.9,TranscriptTool,SUCCESS,,2025-12-27 11:28:31
+GENERIC_RAG,Can you list 2024-2025 ACADEMIC CALENDAR,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:28:49
+BOR_PLANNER,When are the regular BOR meetings scheduled,LLM unavailable,N/A,0.85,BorPlannerTool,SUCCESS,,2025-12-27 11:29:08
+BOR_PLANNER,When are the Board reports due,LLM unavailable,N/A,0.75,GenericRagTool,SUCCESS,,2025-12-27 11:29:30
+BOR_PLANNER,List all the events for Board of regetns,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:29:52
+BOR_PLANNER,ASSOCIATION REPORTING SCHEDULE in board of Regents planner,LLM unavailable,N/A,0.85,BorPlannerTool,SUCCESS,,2025-12-27 11:30:06
+GENERIC_RAG,Early Move-In/Extended Stay policy,LLM unavailable,N/A,0.75,GenericRagTool,SUCCESS,,2025-12-27 11:30:27
+GENERIC_RAG,Residence Halls Security Deposit,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:30:47
+GENERIC_RAG,Background Check.,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:31:08
+GENERIC_RAG,Residence Halls Application Procedures,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:31:25
+GENERIC_RAG,NON-DISCRIMINATION	POLICY,LLM unavailable,N/A,0.75,GenericRagTool,SUCCESS,,2025-12-27 11:31:43
+GENERIC_RAG,SEARCH AND SEIZURE POLICY,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:32:01
+GENERIC_RAG,The Jeanne Clery Act,LLM unavailable,N/A,0.75,GenericRagTool,SUCCESS,,2025-12-27 11:32:20
+GENERIC_RAG,Sex Offenders,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:32:38
+GENERIC_RAG,Dine College guidelines of conduct and behavior while on or off campus,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:33:01
+GENERIC_RAG,Rights to Notice of Disciplinary Charges,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:33:20
+GENERIC_RAG,Right to have Present,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:33:38
+GENERIC_RAG,Rights to Search and Seizure,LLM unavailable,N/A,0.75,GenericRagTool,SUCCESS,,2025-12-27 11:33:56
+GENERIC_RAG,Filing an Incident Report Form,LLM unavailable,N/A,0.95,GenericRagTool,SUCCESS,,2025-12-27 11:34:15
