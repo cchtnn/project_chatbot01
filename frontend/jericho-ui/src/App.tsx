@@ -47,7 +47,7 @@ function App() {
   const [sessionsLoading, setSessionsLoading] = useState(false)
 
   // ========== UX ENHANCEMENTS STATE ==========
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [recognition, setRecognition] = useState<any>(null)
@@ -161,67 +161,46 @@ function App() {
   // ========== FUNCTIONS ==========
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoginError(null)
-    if (!username.trim() || !password.trim()) {
-      setLoginError('Username and password are required.')
-      return
+  e.preventDefault()
+  setLoginError(null)
+  if (!username.trim() || !password.trim()) {
+    setLoginError('Username and password are required.')
+    return
+  }
+  
+  // Prevent multiple simultaneous login attempts
+  if (loginLoading) {
+    return
+  }
+  
+  setLoginLoading(true)
+  try {
+    const resp = await fetch('http://localhost:8000/apiv1/react-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+      credentials: 'include',
+    })
+    
+    const data = await resp.json()
+    
+    if (!resp.ok) {
+      throw new Error(data.message || `HTTP ${resp.status}`)
     }
-    setLoginLoading(true)
-    try {
-      const resp = await fetch('http://localhost:8000/apiv1/react-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-        credentials: 'include',
-      })
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`)
-      }
-      const data = await resp.json()
+    
+    if (data.role) {
       setRole(data.role)
-      setScreen('chat')
-    } catch (err) {
-      console.error(err)
-      setLoginError('Invalid username or password.')
-    } finally {
       setLoginLoading(false)
+      setScreen('chat')
+    } else {
+      throw new Error('Invalid response from server')
     }
+  } catch (err) {
+    console.error(err)
+    setLoginError('Invalid username or password.')
+    setLoginLoading(false)
   }
-
-  const loadSessions = async () => {
-    setSessionsLoading(true)
-    try {
-      const resp = await fetch('http://localhost:8000/user_sessions', {
-        method: 'GET',
-        credentials: 'include',
-      })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data = await resp.json()
-      const raw = data.sessions || []
-
-      const list: SessionInfo[] = raw.map((s: any) => ({
-        session_id: s.session_id ?? s.sessionid,
-        session_name:
-          s.session_name ??
-          s.sessionname ??
-          `Chat ${s.session_id ?? s.sessionid}`,
-      }))
-      setSessions(list)
-
-      if (list.length > 0) {
-        const last = list[list.length - 1]
-        setCurrentSessionId(last.session_id)
-        await loadHistory(last.session_id)
-      } else {
-        await handleNewChat()
-      }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setSessionsLoading(false)
-    }
-  }
+}
 
   const loadHistory = async (sessionId: number) => {
     try {
@@ -260,35 +239,43 @@ function App() {
   }
 
   const handleNewChat = async () => {
-    setShowTemplates(true)
-    try {
-      const resp = await fetch('http://localhost:8000/new_session', {
-        method: 'POST',
-        credentials: 'include',
-      })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data = await resp.json()
-      const sessionId: number = data.session_id ?? data.sessionid
+  setShowTemplates(true)
+  try {
+    const resp = await fetch('http://localhost:8000/new_session', {
+      method: 'POST',
+      credentials: 'include',
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data = await resp.json()
+    const sessionId: number = data.session_id ?? data.sessionid
 
-      console.log('[handleNewChat] Created session:', sessionId)
+    console.log('[handleNewChat] Created session:', sessionId)
 
-      if (!sessionId) {
-        console.error('[handleNewChat] No sessionId returned!', data)
-        return
-      }
-
-      const newSession: SessionInfo = {
-        session_id: sessionId,
-        session_name: 'New Chat',
-      }
-      setSessions((prev) => [...prev, newSession])
-      setCurrentSessionId(sessionId)
+    if (!sessionId) {
+      console.error('[handleNewChat] No sessionId returned!', data)
+      // Set a temporary session ID to prevent blank page
+      setCurrentSessionId(1)
       setMessages([])
       setNextId(1)
-    } catch (err) {
-      console.error('[handleNewChat] Error:', err)
+      return
     }
+
+    const newSession: SessionInfo = {
+      session_id: sessionId,
+      session_name: 'New Chat',
+    }
+    setSessions((prev) => [...prev, newSession])
+    setCurrentSessionId(sessionId)
+    setMessages([])
+    setNextId(1)
+  } catch (err) {
+    console.error('[handleNewChat] Error:', err)
+    // Set a fallback session ID to prevent blank page
+    setCurrentSessionId(1)
+    setMessages([])
+    setNextId(1)
   }
+}
 
   const handleSelectSession = async (sessionId: number) => {
     if (sessionId === currentSessionId) return
@@ -361,6 +348,37 @@ function App() {
       console.error(err)
     }
   }
+
+  const loadSessions = async () => {
+  setSessionsLoading(true)
+  try {
+    const resp = await fetch('http://localhost:8000/user_sessions', {
+      method: 'GET',
+      credentials: 'include',
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data = await resp.json()
+    const raw = data.sessions || []
+
+    const list: SessionInfo[] = raw.map((s: any) => ({
+      session_id: s.session_id ?? s.sessionid,
+      session_name:
+        s.session_name ??
+        s.sessionname ??
+        `Chat ${s.session_id ?? s.sessionid}`,
+    }))
+    setSessions(list)
+
+    // Always create a new chat session on login
+    handleNewChat()
+  } catch (err) {
+    console.error('Error loading sessions:', err)
+    // Even if loading sessions fails, try to create a new chat
+    handleNewChat()
+  } finally {
+    setSessionsLoading(false)
+  }
+}
 
   const handleSend = async () => {
     const q = input.trim()
@@ -539,22 +557,24 @@ function App() {
   }
 
   const handleLogout = async () => {
-    try {
-      await fetch('http://localhost:8000/logout', {
-        method: 'POST',
-        credentials: 'include',
-      })
-    } catch (e) {
-      console.error(e)
-    }
-    setUsername('')
-    setPassword('')
-    setRole(null)
-    setSessions([])
-    setCurrentSessionId(null)
-    setMessages([])
-    setScreen('login')
+  try {
+    await fetch('http://localhost:8000/logout', {
+      method: 'POST',
+      credentials: 'include',
+    })
+  } catch (e) {
+    console.error(e)
   }
+  setUsername('')
+  setPassword('')
+  setRole(null)
+  setSessions([])
+  setCurrentSessionId(null)
+  setMessages([])
+  setLoginLoading(false)
+  setLoginError(null)
+  setScreen('login')
+}
 
   // ========== LOGIN SCREEN ==========
   if (screen === 'login') {
@@ -563,14 +583,14 @@ function App() {
         <div className="absolute top-6 left-6 flex items-center gap-3">
           <img
             src="https://www.dinecollege.edu/wp-content/uploads/2024/12/dc_logoFooter.png"
-            alt="Diné College"
+            alt="Dine College Assistant"
             className="h-10 rounded-md object-contain"
           />
         </div>
 
         <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl p-8 w-full max-w-md text-white">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-1">Diné College</h1>
+            <h1 className="text-3xl font-bold mb-1">Dine College Assistant</h1>
             <p className="text-sm text-amber-300 font-semibold">
               Powered by Jericho
             </p>
@@ -618,22 +638,23 @@ function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
       {/* HEADER */}
-      <header className="h-16 px-6 flex items-center justify-between bg-white border-b border-slate-200 shadow-sm">
+      <header className="sticky top-0 z-50 h-16 px-6 flex items-center justify-between bg-white border-b border-slate-200 shadow-sm">
         <div className="flex items-center gap-4">
           <button
-            className="p-2 hover:bg-slate-100 rounded-lg transition lg:hidden"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-          >
-            <span className="text-2xl">≡</span>
-          </button>
+              className="p-2 hover:bg-slate-100 rounded-lg transition"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              title="Toggle sidebar"
+            >
+              <span className="text-2xl">≡</span>
+            </button>
           <div className="flex items-center gap-3">
             <img
               src="https://www.dinecollege.edu/wp-content/uploads/2024/12/dc_logoFooter.png"
-              alt="Diné College"
+              alt="Dine College Assistant"
               className="h-8 rounded-md object-contain"
             />
             <div>
-              <h1 className="font-bold text-slate-900">Diné College</h1>
+              <h1 className="font-bold text-slate-900">Dine College Assistant</h1>
               <p className="text-xs text-amber-600 font-semibold">
                 Powered by Jericho
               </p>
@@ -659,12 +680,19 @@ function App() {
         </div>
       </header>
 
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex overflow-hidden pt-16">
+        {/* Overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/30 z-30"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
         {/* SIDEBAR */}
         <aside
-          className={`fixed lg:relative w-64 h-[calc(100vh-4rem)] bg-white border-r border-slate-200 p-4 flex flex-col overflow-y-auto z-40 transition-transform lg:translate-x-0 ${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
+        className={`fixed w-64 h-[calc(100vh-4rem)] bg-white border-r border-slate-200 shadow-xl p-4 flex flex-col overflow-y-auto z-40 transition-transform ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
         >
           <button
             className="w-full mb-4 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold py-2.5 text-sm transition shadow-md"
@@ -750,12 +778,12 @@ function App() {
           {adminView === 'chat' || role !== 'admin' ? (
             <>
               {/* CHAT MESSAGES */}
-              <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-slate-50 to-slate-100">
+                <div className="flex-1 overflow-y-auto p-6 pb-32 bg-gradient-to-b from-slate-50 to-slate-100">
                 <div className="max-w-3xl mx-auto space-y-4">
                   {messages.length === 0 && !showTemplates && (
                     <div className="text-center py-12">
                       <p className="text-slate-500 mb-4">
-                        Start a conversation about Diné College
+                        Start a conversation about Dine College
                       </p>
                       <button
                         className="text-amber-600 hover:text-amber-700 text-sm font-semibold"
@@ -962,36 +990,8 @@ function App() {
               </div>
 
               {/* INPUT AREA */}
-              <div className="border-t border-slate-200 bg-white p-4 shadow-lg">
+              <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white p-4 shadow-lg z-40">
                 <div className="max-w-3xl mx-auto flex items-end gap-3">
-                  {/* UPLOAD BUTTON */}
-                  <button
-                    className="p-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition disabled:opacity-50"
-                    onClick={() => {
-                      setShowUpload(true)
-                      setUploadFiles(null)
-                      setUploadStatus(null)
-                    }}
-                    disabled={!currentSessionId}
-                    title="Upload documents"
-                  >
-                    📎
-                  </button>
-
-                  {/* VOICE BUTTON */}
-                  <button
-                    className={`p-3 rounded-lg transition disabled:opacity-50 ${
-                      isListening
-                        ? 'bg-red-500 text-white'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                    }`}
-                    onClick={toggleVoice}
-                    disabled={!currentSessionId}
-                    title={isListening ? 'Stop listening' : 'Start voice input'}
-                  >
-                    🎤
-                  </button>
-
                   {/* TEXT INPUT */}
                   <textarea
                     className="flex-1 rounded-lg border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent resize-none"
@@ -1011,6 +1011,40 @@ function App() {
                     }}
                     disabled={!currentSessionId}
                   />
+
+                  {/* UPLOAD BUTTON */}
+                  <button
+                    className="p-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition disabled:opacity-50"
+                    onClick={() => {
+                      setShowUpload(true)
+                      setUploadFiles(null)
+                      setUploadStatus(null)
+                    }}
+                    disabled={!currentSessionId}
+                    title="Upload documents"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                    </svg>
+                  </button>
+
+                  {/* VOICE BUTTON */}
+                  <button
+                    className={`p-3 rounded-lg transition disabled:opacity-50 ${
+                      isListening
+                        ? 'bg-red-500 text-white'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                    }`}
+                    onClick={toggleVoice}
+                    disabled={!currentSessionId}
+                    title={isListening ? 'Stop listening' : 'Start voice input'}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      <line x1="12" x2="12" y1="19" y2="22"/>
+                    </svg>
+                  </button>
 
                   {/* SEND BUTTON */}
                   <button
@@ -1035,17 +1069,15 @@ function App() {
                 {/* STATS */}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-md p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-slate-900">
-                      📊 RAG Statistics
-                    </h3>
-                    <button
-                      className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition"
-                      onClick={loadAdminStats}
-                      disabled={adminStatsLoading}
-                    >
-                      {adminStatsLoading ? '⏳ Refreshing...' : '🔄 Refresh'}
-                    </button>
-                  </div>
+                      <h3 className="text-sm font-semibold text-slate-700">MENU</h3>
+                      <button
+                        className="p-1 hover:bg-slate-100 rounded"
+                        onClick={() => setSidebarOpen(false)}
+                        title="Close sidebar"
+                      >
+                        <span className="text-xl text-slate-600">×</span>
+                      </button>
+                    </div>
                   {adminStats && (
                     <div className="text-sm text-slate-700 space-y-2">
                       <div>

@@ -1,6 +1,7 @@
 # ----------------------
 # Python / Virtualenv
 # ----------------------
+.venv/
 venv/
 venv_p310/
 .env
