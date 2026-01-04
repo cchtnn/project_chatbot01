@@ -226,7 +226,7 @@ python -m venv venv_p310
 pip install -r requirements.txt
 
 # Configure environment (create .env file)
-echo "LLMPROVIDER=groq" > .env
+echo "LLM_PROVIDER=groq" > .env
 echo "GROQ_API_KEY=your_key_here" >> .env
 
 # Ingest documents
@@ -236,10 +236,10 @@ python ingest_all.py
 uvicorn app:app --reload --port 8000
 
 # In new terminal: Setup frontend
-cd ..\frontend
+cd ..\frontend\jericho-ui
 npm install
-npm install react-markdown  # For Markdown rendering
-npm start
+npm install react-markdown remark-gfm rehype-raw # For Markdown rendering
+npm start or npm run dev
 ```
 
 **Access the application:**
@@ -330,12 +330,12 @@ Create `backend/.env`:
 
 ```bash
 # LLM Provider (choose one)
-LLMPROVIDER=groq
+LLM_PROVIDER=groq
 GROQ_API_KEY=your_groq_api_key_here
 GROQ_MODEL=llama-3.1-8b-instant
 
 # Alternative: Local Ollama
-# LLMPROVIDER=ollama
+# LLM_PROVIDER=ollama
 # OLLAMA_BASE_URL=http://localhost:11434
 # OLLAMA_MODEL=llama3
 
@@ -539,7 +539,7 @@ Get chat history for session.
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `LLMPROVIDER` | LLM provider (`groq`/`ollama`/`openai`) | `groq` | ✅ |
+| `LLM_PROVIDER` | LLM provider (`groq`/`ollama`/`openai`) | `groq` | ✅ |
 | `GROQ_API_KEY` | Groq API key | - | If using Groq |
 | `GROQ_MODEL` | Groq model name | `llama-3.1-8b-instant` | If using Groq |
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` | If using Ollama |
@@ -553,21 +553,21 @@ Get chat history for session.
 
 **Groq (Cloud - Fast):**
 ```bash
-LLMPROVIDER=groq
+LLM_PROVIDER=groq
 GROQ_API_KEY=gsk_xxxxxxxxxxxx
 GROQ_MODEL=llama-3.1-8b-instant
 ```
 
 **Ollama (Local - Private):**
 ```bash
-LLMPROVIDER=ollama
+LLM_PROVIDER=ollama
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3
 ```
 
 **OpenAI:**
 ```bash
-LLMPROVIDER=openai
+LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-xxxxxxxxxxxx
 OPENAI_MODEL=gpt-3.5-turbo
 ```
@@ -825,7 +825,7 @@ Switch to Ollama (local):
 ollama pull llama3
 
 # Update .env
-LLMPROVIDER=ollama
+LLM_PROVIDER=ollama
 OLLAMA_MODEL=llama3
 ```
 
