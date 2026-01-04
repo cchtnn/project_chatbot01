@@ -238,6 +238,15 @@ class RAGPipeline:
         
         # 2. Retrieve MORE context (top_k=10)
         results = self.db.query(question, top_k=max(top_k * 2, 10), filters=filters)
+        # LOG: Retrieved document sources with paths
+        logger.info(f"[RAG Pipeline] Retrieved {len(results)} chunks from sources:")
+        for idx, result in enumerate(results):
+            meta = result.get('metadata', {})
+            logger.info(
+                f"  [{idx+1}] {meta.get('filename', 'Unknown')} "
+                f"(hash: {meta.get('file_hash', 'N/A')[:16]}..., "
+                f"distance: {result.get('distance', 0):.3f})"
+            )
         
         # 3. Fix metadata for ALL sources
         for r in results:

@@ -1,3 +1,8 @@
+"""
+DEPRECATED FOR UI UPLOADS - This script is only for initial bulk document ingestion.
+UI uploads now use session-scoped storage via /upload endpoint.
+"""
+
 from pathlib import Path
 import sys
 
@@ -16,7 +21,7 @@ from services.rag_pipeline import RAGPipeline  # note: ragpipeline, no underscor
 
 
 def main():
-    docs_root = Path(r"D:\jericho\data\documents")
+    docs_root = Path(r"data\documents")
     paths = [str(p) for p in docs_root.rglob("*") if p.is_file()]
     logger.info(f"Found {len(paths)} files to ingest under {docs_root}")
 

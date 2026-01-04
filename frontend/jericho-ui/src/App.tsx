@@ -64,6 +64,7 @@ function App() {
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [renameSessionId, setRenameSessionId] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [showDeleteNotification, setShowDeleteNotification] = useState(false)
 
   // ========== UPLOAD ==========
   const [showUpload, setShowUpload] = useState(false)
@@ -362,6 +363,10 @@ function App() {
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
 
       setSessions((prev) => prev.filter((s) => s.session_id !== sessionId))
+      setShowDeleteNotification(true)
+      setTimeout(() => {
+        setShowDeleteNotification(false)
+      }, 2000)
       setSessionMenuOpenId(null)
 
       if (currentSessionId === sessionId) {
@@ -581,7 +586,11 @@ function App() {
   // ========== LOGIN SCREEN ==========
   if (screen === 'login') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900">
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+      {/* Animated background blur circles */}
+      <div className="absolute top-20 left-20 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
+      <div className="absolute bottom-20 right-20 w-72 h-72 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style={{ animationDelay: '2s' }}></div>
+      <div className="absolute top-40 right-40 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style={{ animationDelay: '4s' }}></div>
         <div className="absolute top-6 left-6 flex items-center gap-3">
           <img
             src="https://www.dinecollege.edu/wp-content/uploads/2024/12/dc_logoFooter.png"
@@ -590,7 +599,7 @@ function App() {
           />
         </div>
 
-        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl p-8 w-full max-w-md text-white">
+        <div className="glass-strong rounded-2xl shadow-2xl p-8 w-full max-w-md text-white relative z-10 hover:shadow-amber-500/20 hover:shadow-xl">
           <div className="mb-6">
             <h1 className="text-3xl font-bold mb-1">Dine College Assistant</h1>
             <p className="text-sm text-amber-300 font-semibold">
@@ -640,7 +649,7 @@ function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
       {/* HEADER */}
-      <header className="sticky top-0 z-50 h-16 px-6 flex items-center justify-between bg-white border-b border-slate-200 shadow-sm">
+      <header className="sticky top-0 z-50 h-16 px-6 flex items-center justify-between glass-strong border-b border-white/20 shadow-lg backdrop-blur-xl">
         <div className="flex items-center gap-4">
           <button
             className="p-2 hover:bg-slate-100 rounded-lg transition"
@@ -692,15 +701,19 @@ function App() {
             onClick={() => setSidebarOpen(false)}
           />
         )}
+        {sessionMenuOpenId !== null && (
+          <div
+            className="fixed inset-0 z-30"
+            onClick={() => setSessionMenuOpenId(null)}
+          />
+        )}
 
         {/* SIDEBAR */}
-        <aside
-          className={`fixed w-64 h-[calc(100vh-4rem)] bg-white border-r border-slate-200 shadow-xl p-4 flex flex-col overflow-y-auto z-40 transition-transform ${
+        <aside className={`fixed w-64 h-[calc(100vh-4rem)] glass-strong border-r border-white/20 shadow-2xl p-4 flex flex-col z-40 transition-transform duration-300 ease-in-out ${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
-          <button
-            className="w-full mb-4 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold py-2.5 text-sm transition shadow-md"
+          <button className="w-full mb-4 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold py-2.5 text-sm transition-all duration-300 shadow-lg hover:shadow-amber-400/50 hover:shadow-xl hover:scale-105 float-animation"
             onClick={handleNewChat}
             disabled={sessionsLoading}
           >
@@ -726,19 +739,18 @@ function App() {
             CONVERSATION HISTORY
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-2">
+          <div className="flex-1 overflow-y-auto overflow-x-visible space-y-2">
             {sessions.length === 0 && !sessionsLoading && (
               <div className="text-xs text-slate-400 px-2 py-4 text-center">
                 No chats yet. Click "New Chat" to start!
               </div>
             )}
             {sessions.map((s) => (
-              <div
-                key={s.session_id}
-                className={`flex items-center rounded-lg overflow-hidden transition ${
-                  s.session_id === currentSessionId
-                    ? 'bg-gradient-to-r from-amber-500 to-amber-400 text-slate-900'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              <div key={s.session_id} className="relative">
+              <div className={`flex items-center rounded-lg transition-all duration-300 hover:scale-105 ${
+                s.session_id === currentSessionId
+                  ? 'glass-dark shadow-lg shadow-amber-400/30 text-white'
+                  : 'glass hover:glass-strong text-slate-800 hover:shadow-md'
                 }`}
               >
                 <button
@@ -749,31 +761,54 @@ function App() {
                 </button>
                 <button
                   className="px-2 text-xs hover:opacity-70 transition"
-                  onClick={() =>
+                  onClick={(e) => {
+                    e.stopPropagation()
                     setSessionMenuOpenId(
                       sessionMenuOpenId === s.session_id ? null : s.session_id
                     )
-                  }
+                  }}
                 >
                   ⋮
                 </button>
-                {sessionMenuOpenId === s.session_id && (
-                  <div className="absolute mt-8 bg-white border border-slate-200 rounded-lg shadow-lg z-50 text-xs text-slate-700 w-32">
-                    <button
-                      className="block w-full px-3 py-2 hover:bg-slate-100 text-left"
-                      onClick={() => openRenameModal(s)}
-                    >
-                      ✏️ Rename
-                    </button>
-                    <button
-                      className="block w-full px-3 py-2 hover:bg-red-50 text-left text-red-600"
-                      onClick={() => handleDeleteSession(s.session_id)}
-                    >
-                      🗑️ Delete
-                    </button>
-                  </div>
-                )}
               </div>
+              
+              {sessionMenuOpenId === s.session_id && (
+              <>
+                <div 
+                  className="fixed inset-0"
+                  style={{ zIndex: 999 }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSessionMenuOpenId(null)
+                  }}
+                />
+                <div 
+                  className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl text-xs text-slate-700 w-32"
+                  style={{ zIndex: 1000 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    className="block w-full px-3 py-2 hover:bg-slate-100 text-left rounded-t-lg"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openRenameModal(s)
+                    }}
+                  >
+                    ✏️ Rename
+                  </button>
+                  <button
+                    className="block w-full px-3 py-2 hover:bg-red-50 text-left text-red-600 rounded-b-lg"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteSession(s.session_id)
+                    }}
+                  >
+                    🗑️ Delete
+                  </button>
+                </div>
+              </>
+            )}
+            </div>
             ))}
           </div>
         </aside>
@@ -783,7 +818,7 @@ function App() {
           {adminView === 'chat' || role !== 'admin' ? (
             <>
               {/* CHAT MESSAGES */}
-              <div className="flex-1 overflow-y-auto p-6 pb-32 bg-gradient-to-b from-slate-50 to-slate-100">
+              <div className="flex-1 overflow-y-auto p-6 pb-32 relative">
                 <div className="max-w-3xl mx-auto space-y-4">
                   {messages.length === 0 && !showTemplates && (
                     <div className="text-center py-12">
@@ -801,7 +836,7 @@ function App() {
 
                   {/* TEMPLATES MODAL */}
                   {showTemplates && messages.length === 0 && (
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-lg p-6 mb-6">
+                    <div className="glass-strong rounded-xl border border-white/20 shadow-2xl p-6 mb-6 hover:shadow-amber-400/20 transition-all duration-300">
                       <h3 className="font-bold text-slate-900 mb-4">
                         🎯 Quick Start Templates
                       </h3>
@@ -809,7 +844,7 @@ function App() {
                         {DOMAIN_TEMPLATES.map((tmpl) => (
                           <button
                             key={tmpl.id}
-                            className="p-4 rounded-lg border border-slate-200 hover:border-amber-400 hover:bg-amber-50 text-left transition"
+                            className="p-4 rounded-lg glass hover:glass-strong hover:border-amber-400/50 hover:shadow-lg hover:scale-105 text-left transition-all duration-300"
                             onClick={() => useTemplate(tmpl)}
                           >
                             <div className="font-semibold text-slate-900 text-sm mb-1">
@@ -834,11 +869,10 @@ function App() {
                         m.role === 'user' ? 'justify-end' : 'justify-start'
                       }`}
                     >
-                      <div
-                        className={`max-w-4xl rounded-xl px-5 py-4 text-sm shadow-md ${
-                          m.role === 'user'
-                            ? 'bg-gradient-to-r from-amber-500 to-amber-400 text-slate-900 font-medium'
-                            : 'bg-white text-slate-800 border border-slate-200'
+                      <div className={`max-w-4xl rounded-xl px-5 py-4 text-sm shadow-lg message-enter ${
+                        m.role === 'user'
+                          ? 'bg-gradient-to-r from-amber-500 to-amber-400 text-slate-900 font-medium shadow-amber-400/50'
+                          : 'glass-strong text-slate-800 border-white/20 hover:shadow-xl hover:scale-[1.02] transition-all duration-300'
                         }`}
                       >
                         {/* MESSAGE CONTENT - ENHANCED WITH TABLE SUPPORT */}
@@ -1032,11 +1066,11 @@ function App() {
               </div>
 
               {/* INPUT AREA - FIXED AT BOTTOM */}
-              <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white p-4 shadow-lg z-40">
+              <div className="fixed bottom-0 left-0 right-0 border-t border-white/20 glass-strong p-4 shadow-2xl z-40 backdrop-blur-2xl">
                 <div className="max-w-3xl mx-auto flex items-end gap-3">
                   {/* TEXT INPUT */}
                   <textarea
-                    className="flex-1 rounded-lg border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent resize-none"
+                    className="flex-1 rounded-lg border border-white/30 glass px-4 py-3 text-sm text-slate-800 placeholder-slate-500 focus:outline-none glow-focus focus:border-transparent resize-none transition-all duration-300"
                     rows={1}
                     placeholder={
                       currentSessionId
@@ -1056,7 +1090,7 @@ function App() {
 
                   {/* UPLOAD BUTTON */}
                   <button
-                    className="p-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition disabled:opacity-50"
+                    className="p-3 rounded-lg glass hover:glass-strong hover:shadow-md hover:scale-110 text-slate-700 transition-all duration-300 disabled:opacity-50"
                     onClick={() => {
                       setShowUpload(true)
                       setUploadFiles(null)
@@ -1081,11 +1115,10 @@ function App() {
                   </button>
 
                   {/* VOICE BUTTON */}
-                  <button
-                    className={`p-3 rounded-lg transition disabled:opacity-50 ${
+                  <button className={`p-3 rounded-lg transition-all duration-300 disabled:opacity-50 hover:scale-110 ${
                       isListening
-                        ? 'bg-red-500 text-white'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-500/50'
+                        : 'glass hover:glass-strong text-slate-700 hover:shadow-md'
                     }`}
                     onClick={toggleVoice}
                     disabled={!currentSessionId}
@@ -1109,8 +1142,7 @@ function App() {
                   </button>
 
                   {/* SEND BUTTON */}
-                  <button
-                    className="p-3 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold transition disabled:opacity-50"
+                  <button className="p-3 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold transition-all duration-300 disabled:opacity-50 hover:shadow-xl hover:shadow-amber-400/50 hover:scale-110"
                     disabled={loading || !input.trim() || !currentSessionId}
                     onClick={handleSend}
                     title="Send message"
@@ -1206,7 +1238,7 @@ function App() {
       {/* UPLOAD MODAL */}
       {showUpload && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 mx-4">
+          <div className="glass-strong rounded-xl shadow-2xl w-full max-w-lg p-6 mx-4 border border-white/30 text-white">
             <h2 className="text-xl font-bold mb-2 text-slate-900">
               📤 Upload Documents
             </h2>
@@ -1271,16 +1303,16 @@ function App() {
       {/* RENAME MODAL */}
       {showRenameModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 mx-4">
+          <div className="glass-strong rounded-xl shadow-2xl w-full max-w-sm p-6 mx-4 border border-white/30 text-white">
             <h2 className="text-lg font-bold mb-4 text-slate-900">
               ✏️ Rename Chat
             </h2>
             <input
-              type="text"
-              className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-amber-400"
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-            />
+                type="text"
+                className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white text-slate-900"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+              />
             <div className="flex justify-end gap-3">
               <button
                 className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-sm font-medium transition"
@@ -1296,6 +1328,13 @@ function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* DELETE NOTIFICATION */}
+      {showDeleteNotification && (
+        <div className="fixed top-20 right-6 bg-green-500 text-white px-4 py-2 rounded-lg shadow-2xl z-[9999] animate-fade-in-down flex items-center gap-2">
+          <span className="text-sm">✓</span>
+          <span className="font-semibold">Chat Deleted</span>
         </div>
       )}
     </div>

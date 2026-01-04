@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 
 
 from sqlalchemy import (
@@ -35,6 +35,14 @@ Base = declarative_base()
 
 # Add UserFeedback AFTER ChatSession & ChatMessage classes (ORDER MATTERS)
 
+class SessionDocument(Base):
+    __tablename__ = 'session_documents'
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey('chatsessions.id'), index=True)
+    file_hash = Column(String, index=True)  # Links to ChromaDB
+    filename = Column(String)
+    filepath = Column(String)  # Full path in data/documents/
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
 
 class ChatSession(Base):
     __tablename__ = 'chatsessions'
@@ -181,5 +189,86 @@ def delete_session(session_id: int) -> None:
         if s:
             db.delete(s)
             db.commit()
+    finally:
+        db.close()
+
+def add_document_to_session(session_id: int, file_hash: str, filename: str, filepath: str) -> None:
+    """Link uploaded document to session."""
+    db = get_db()
+    try:
+        doc = SessionDocument(
+            session_id=session_id,
+            file_hash=file_hash,
+            filename=filename,
+            filepath=filepath
+        )
+        db.add(doc)
+        db.commit()
+    finally:
+        db.close()
+
+from core import get_logger
+logger = get_logger(__name__)
+
+def get_session_file_hashes(session_id: int) -> List[str]:
+    """Get all file hashes for a session (for filtering queries)."""
+    db = get_db()
+    try:
+        docs = (
+            db.query(SessionDocument)
+            .filter(SessionDocument.session_id == session_id)
+            .all()
+        )
+        logger.info(
+            f"[SessionDB] Session {session_id} has {len(docs)} linked documents: "
+            f"{[d.filename for d in docs]}"
+        )
+        return [d.file_hash for d in docs]
+    finally:
+        db.close()
+
+
+def get_session_documents(session_id: int) -> List[Dict[str, Any]]:
+    """Get all document info for a session."""
+    db = get_db()
+    try:
+        docs = (
+            db.query(SessionDocument)
+            .filter(SessionDocument.session_id == session_id)
+            .all()
+        )
+        return [
+            {
+                "file_hash": d.file_hash,
+                "filename": d.filename,
+                "filepath": d.filepath,
+                "uploaded_at": d.uploaded_at
+            }
+            for d in docs
+        ]
+    finally:
+        db.close()
+
+
+def cleanup_session_documents(session_id: int) -> List[str]:
+    """
+    Get file hashes and filepaths for cleanup when session is deleted.
+    Returns list of (file_hash, filepath) tuples.
+    """
+    db = get_db()
+    try:
+        docs = (
+            db.query(SessionDocument)
+            .filter(SessionDocument.session_id == session_id)
+            .all()
+        )
+        cleanup_data = [(d.file_hash, d.filepath) for d in docs]
+        
+        # Delete records
+        for doc in docs:
+            db.delete(doc)
+        db.commit()
+        
+        return cleanup_data
     finally:
         db.close()

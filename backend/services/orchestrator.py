@@ -270,6 +270,7 @@ class RoutingFeedback:
 class OrchestratorRequest(BaseModel):
     query: str
     conversation_history: List[Dict[str, str]] = []
+    session_file_hashes: List[str] = []  # NEW - for session-scoped filtering
 
 
 class OrchestratorResponse(BaseModel):
@@ -364,6 +365,13 @@ class Orchestrator:
         tool_results: List[ToolResult] = []
         tools_used: List[str] = []
         
+        # Prepare filters for session-scoped queries
+        query_filters = None
+        if request.session_file_hashes:
+            # ChromaDB filter format: match any of these file hashes
+            query_filters = {"file_hash": {"$in": request.session_file_hashes}}
+            logger.info(f"[Orchestrator] Applying session filter: {len(request.session_file_hashes)} documents")
+
         if tool_name in TOOL_MAP:
             try:
                 # Extract parameters
@@ -399,7 +407,8 @@ class Orchestrator:
                     if m_payroll:
                         params["payroll_no"] = int(m_payroll.group(2))
                 
-                # Execute
+                # Execute with session filters
+                params["filters"] = query_filters  # Pass filters to tool
                 result = TOOL_MAP[tool_name](request.query, params)
                 tool_results.append(result)
                 tools_used.append(tool_name)

@@ -149,11 +149,44 @@ async def delete_session(
     user=Depends(get_current_user),
 ):
     """
-    Delete a session (used by delete option in chat sidebar).
+    Delete session AND cleanup associated documents.
     """
-    session_db.delete_session(session_id)
-    logger.info(f"[delete_session] deleted session_id={session_id}")
-    return {"success": True}
+    try:
+        # Get document cleanup data
+        cleanup_data = session_db.cleanup_session_documents(session_id)
+        
+        # Delete from ChromaDB
+        file_hashes = [fh for fh, _ in cleanup_data]
+        if file_hashes:
+            from db.chromadb_manager import ChromaDBManager
+            db_manager = ChromaDBManager()
+            db_manager.delete_by_file_hashes(file_hashes)
+        
+        # Delete physical files
+        import os
+        for _, filepath in cleanup_data:
+            try:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    logger.info(f"Deleted file: {filepath}")
+            except Exception as e:
+                logger.error(f"Failed to delete file {filepath}: {e}")
+        
+        # Delete session-specific directory if empty
+        session_dir = Path("data/documents") / f"session_{session_id}"
+        if session_dir.exists() and not any(session_dir.iterdir()):
+            session_dir.rmdir()
+            logger.info(f"Deleted empty session directory: {session_dir}")
+        
+        # Delete session from database
+        session_db.delete_session(session_id)
+        
+        logger.info(f"[delete_session] Deleted session {session_id} with {len(cleanup_data)} documents")
+        return {"success": True, "documents_deleted": len(cleanup_data)}
+        
+    except Exception as e:
+        logger.error(f"[delete_session] error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Session deletion failed")
 
 
 # ---------- CORE RAG /query USED BY UI (WITH HISTORY + CONTEXT) ----------
@@ -195,14 +228,39 @@ async def query_endpoint(
         
         # Resolve ambiguous references using context
         enriched_query = context_resolver.resolve(query, conversation_history)
+
+        # PHASE 3: Get session document hashes for filtering
+        session_file_hashes = session_db.get_session_file_hashes(session_id)
+        # LOG: Session documents being used for filtering
+        session_docs_info = session_db.get_session_documents(session_id)
+        logger.info(f"[query] Session {session_id} documents:")
+        for doc in session_docs_info:
+            logger.info(
+                f"  - {doc['filename']} (hash: {doc['file_hash'][:16]}...) "
+                f"at {doc['filepath']}"
+            )
+        
+        if not session_file_hashes:
+            logger.warning(f"[query] No documents in session {session_id}")
+            return {
+                "answer": "No documents have been uploaded to this session yet. Please upload documents first.",
+                "session_id": session_id,
+                "sources": [],
+                "tools_used": [],
+                "confidence": 0.0,
+                "sessionnameupdated": False,
+            }
+        
+        logger.info(f"[query] Filtering by {len(session_file_hashes)} session documents")
         
         if enriched_query != query:
             logger.info(f"[query] Context enriched: '{query}' --> '{enriched_query}'")
         
-        # Delegate to orchestrator WITH HISTORY
+        # Delegate to orchestrator WITH HISTORY AND SESSION FILTERS
         request = OrchestratorRequest(
             query=enriched_query,
-            conversation_history=conversation_history
+            conversation_history=conversation_history,
+            session_file_hashes=session_file_hashes  # NEW
         )
         response = orchestrator.handle_query(request)
         answer_text = response.answer
@@ -243,23 +301,18 @@ async def upload_endpoint(
     user=Depends(get_current_user),
 ):
     """
-    Upload endpoint used by chat.html.
-
-    Frontend sends FormData:
-      - files (one or more)
-      - private (boolean)
-      - session_id
-
-    We save files to data/documents/ and ingest into RAG pipeline.
+    Upload endpoint - SESSION-SCOPED.
+    Documents are linked to the session and only accessible within that session.
     """
     try:
+        username = getattr(user, 'username', 'guest')
         logger.info(
-            f"[upload] user={getattr(user, 'username', '?')} "
-            f"session_id={session_id} private={private} "
+            f"[upload] user={username} session_id={session_id} "
             f"files={[f.filename for f in files]}"
         )
 
-        base_dir = Path("data/documents")
+        # Save files to session-specific subdirectory
+        base_dir = Path("data/documents") / f"session_{session_id}"
         base_dir.mkdir(parents=True, exist_ok=True)
 
         paths: List[str] = []
@@ -269,7 +322,31 @@ async def upload_endpoint(
                 f.write(await file.read())
             paths.append(str(dest))
 
+        # LOG: Documents being ingested
+        logger.info(f"[upload] FILES TO INGEST: {paths}")
+        logger.info(f"[upload] Target session directory: {base_dir}")
+        # Ingest into RAG pipeline
         stats = rag_pipeline.ingest_documents(paths)
+
+        # Link documents to session in database
+        import hashlib
+        for path in paths:
+            file_path = Path(path)
+            # Generate file hash (same as used in ChromaDB)
+            with open(path, 'rb') as f:
+                file_hash = hashlib.sha256(f.read()).hexdigest()
+                logger.info(
+                f"[upload] Linking document to session: "
+                f"session_id={session_id}, file_hash={file_hash[:16]}..., "
+                f"filename={file_path.name}, filepath={path}"
+            )
+            
+            session_db.add_document_to_session(
+                session_id=session_id,
+                file_hash=file_hash,
+                filename=file_path.name,
+                filepath=path
+            )
 
         message = f"Processed {stats.get('processed', 0)} file(s), failed {stats.get('failed', 0)}."
         return {
@@ -318,14 +395,31 @@ async def react_query(
         
         # Resolve ambiguous references using context
         enriched_query = context_resolver.resolve(req.query, conversation_history)
+
+        # PHASE 3: Get session document hashes for filtering
+        session_file_hashes = session_db.get_session_file_hashes(req.sessionid)
+        
+        if not session_file_hashes:
+            logger.warning(f"[react-query] No documents in session {req.sessionid}")
+            return {
+                "answer": "No documents have been uploaded to this session yet. Please upload documents first.",
+                "sessionid": req.sessionid,
+                "sources": [],
+                "tools_used": [],
+                "confidence": 0.0,
+                "sessionnameupdated": False,
+            }
+        
+        logger.info(f"[react-query] Filtering by {len(session_file_hashes)} session documents")
         
         if enriched_query != req.query:
             logger.info(f"[react-query] Context enriched: '{req.query}' --> '{enriched_query}'")
 
-        # Orchestrator call WITH HISTORY
+        # Orchestrator call WITH HISTORY AND SESSION FILTERS
         orch_request = OrchestratorRequest(
             query=enriched_query,
-            conversation_history=conversation_history
+            conversation_history=conversation_history,
+            session_file_hashes=session_file_hashes  # NEW
         )
         orch_response = orchestrator.handle_query(orch_request)
         answer_text = orch_response.answer
@@ -384,3 +478,57 @@ async def submit_feedback(
     except Exception as e:
         logger.error(f"Feedback error: {e}")
         raise HTTPException(status_code=500, detail="Feedback failed")
+    
+@router.get("/debug/chromadb-contents")
+async def debug_chromadb_contents(user=Depends(get_current_user)):
+    """DEBUG: Show all documents in ChromaDB with their hashes."""
+    try:
+        from db.chromadb_manager import ChromaDBManager
+        db = ChromaDBManager()
+        
+        # Get all chunks
+        all_data = db.collection.get(include=["metadatas"])
+        metadatas = all_data.get("metadatas", [])
+        
+        # Group by file_hash
+        docs_by_hash = {}
+        for meta in metadatas:
+            fh = meta.get("file_hash", "unknown")
+            fn = meta.get("filename", "unknown")
+            if fh not in docs_by_hash:
+                docs_by_hash[fh] = {"filename": fn, "chunks": 0}
+            docs_by_hash[fh]["chunks"] += 1
+        
+        return {
+            "total_chunks": len(metadatas),
+            "unique_documents": len(docs_by_hash),
+            "documents": [
+                {
+                    "file_hash": fh[:16] + "...",
+                    "filename": info["filename"],
+                    "chunk_count": info["chunks"]
+                }
+                for fh, info in docs_by_hash.items()
+            ]
+        }
+    except Exception as e:
+        logger.error(f"[debug] ChromaDB contents error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/debug/session-documents/{session_id}")
+async def debug_session_documents(session_id: int, user=Depends(get_current_user)):
+    """DEBUG: Show which documents are linked to a session."""
+    try:
+        docs = session_db.get_session_documents(session_id)
+        hashes = session_db.get_session_file_hashes(session_id)
+        
+        return {
+            "session_id": session_id,
+            "document_count": len(docs),
+            "documents": docs,
+            "file_hashes": [h[:16] + "..." for h in hashes]
+        }
+    except Exception as e:
+        logger.error(f"[debug] Session documents error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

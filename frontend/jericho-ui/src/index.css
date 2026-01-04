@@ -2,27 +2,102 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Simple app background + font for now */
-body {
-  @apply bg-slate-100 text-slate-900;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    sans-serif;
+/* Animated gradient background */
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
-/* Enhanced table scrolling for long tables */
+body {
+  @apply text-slate-900;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: linear-gradient(-45deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+  min-height: 100vh;
+}
+
+/* Glassmorphism utilities */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Smooth transitions for all interactive elements */
+* {
+  transition: all 0.2s ease;
+}
+
+/* Enhanced table scrolling */
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Ensure tables don't break layout on mobile */
 table {
   max-width: 100%;
   table-layout: auto;
 }
 
-/* Sticky header for long tables */
 thead {
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+/* Smooth message entrance animation */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-enter {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Floating animation for buttons */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.float-animation:hover {
+  animation: float 2s ease-in-out infinite;
+}
+
+/* Glow effect on focus */
+.glow-focus:focus {
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.6);
 }

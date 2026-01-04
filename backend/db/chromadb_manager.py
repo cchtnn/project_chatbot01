@@ -139,6 +139,20 @@ class ChromaDBManager:
                 }
             )
 
+        # LOG: Detailed retrieval results with document paths
+        logger.info(f"[ChromaDB Query] Retrieved {len(formatted)} chunks:")
+        for idx, item in enumerate(formatted):
+            meta = item.get('metadata', {})
+            logger.info(
+                f"  [{idx+1}] filename={meta.get('filename', 'N/A')}, "
+                f"file_hash={meta.get('file_hash', 'N/A')[:16]}..., "
+                f"distance={item.get('distance', 0):.3f}, "
+                f"chunk_id={meta.get('chunk_id', 'N/A')}"
+            )
+            # Check if this is from a session-specific path
+            if 'filename' in meta:
+                logger.info(f"      Source: {meta.get('filename')}")
+
         return formatted
 
     def delete_by_hash(self, file_hash: str):
@@ -146,6 +160,23 @@ class ChromaDBManager:
         self.collection.delete_where({"file_hash": file_hash})
         self.indexed_hashes.discard(file_hash)
         logger.info(f"Deleted document: {file_hash}")
+
+    def delete_by_file_hashes(self, file_hashes: List[str]) -> int:
+        """
+        Delete all chunks for multiple file hashes.
+        Returns count of deleted hashes.
+        """
+        deleted_count = 0
+        for file_hash in file_hashes:
+            try:
+                self.collection.delete(where={"file_hash": file_hash})
+                self.indexed_hashes.discard(file_hash)
+                deleted_count += 1
+            except Exception as e:
+                logger.error(f"Failed to delete hash {file_hash}: {e}")
+        
+        logger.info(f"Deleted {deleted_count} document hashes from ChromaDB")
+        return deleted_count
 
     def get_stats(self) -> Dict[str, Any]:
         """Collection statistics."""
