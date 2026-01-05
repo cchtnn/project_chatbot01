@@ -585,74 +585,111 @@ function App() {
 
   // ========== LOGIN SCREEN ==========
   if (screen === 'login') {
-    return (
-      <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+  return (
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
       {/* Animated background blur circles */}
       <div className="absolute top-20 left-20 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
       <div className="absolute bottom-20 right-20 w-72 h-72 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style={{ animationDelay: '2s' }}></div>
       <div className="absolute top-40 right-40 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style={{ animationDelay: '4s' }}></div>
-        <div className="absolute top-6 left-6 flex items-center gap-3">
-          <img
-            src="https://www.dinecollege.edu/wp-content/uploads/2024/12/dc_logoFooter.png"
-            alt="Dine College Assistant"
-            className="h-10 rounded-md object-contain"
-          />
+      
+      {/* Logo in top-left */}
+      <div className="absolute top-8 left-8 flex items-center gap-3 backdrop-blur-xl bg-white/20 px-4 py-3 rounded-xl border-2 border-white/40 shadow-xl">
+        <img
+          src="https://www.dinecollege.edu/wp-content/uploads/2024/12/dc_logoFooter.png"
+          alt="Dine College Assistant"
+          className="h-10 rounded-md object-contain"
+        />
+      </div>
+
+      {/* Login Card */}
+      <div className="backdrop-blur-2xl bg-white/95 rounded-3xl shadow-2xl p-10 w-full max-w-md relative z-10 border-2 border-white/50 hover:shadow-amber-500/30 hover:shadow-2xl transition-all duration-300">
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+            Dine College Assistant
+          </h1>
+          <p className="text-sm text-amber-600 font-bold tracking-wide">
+            Powered by Jericho
+          </p>
         </div>
 
-        <div className="glass-strong rounded-2xl shadow-2xl p-8 w-full max-w-md text-white relative z-10 hover:shadow-amber-500/20 hover:shadow-xl">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-1">Dine College Assistant</h1>
-            <p className="text-sm text-amber-300 font-semibold">
-              Powered by Jericho
-            </p>
+        {/* Error Message */}
+        {loginError && (
+          <div className="mb-5 text-sm text-red-700 bg-red-50 border-2 border-red-300 rounded-lg px-4 py-3 flex items-center gap-2">
+            <span className="text-lg">⚠️</span>
+            <span>{loginError}</span>
+          </div>
+        )}
+
+        {/* Form */}
+        <form className="space-y-5" onSubmit={handleLogin}>
+          {/* Username */}
+          <div>
+            <label className="block text-sm mb-2 font-semibold text-slate-700">
+              Username
+            </label>
+            <input
+              type="text"
+              className="w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-2 focus:border-amber-400 focus:shadow-lg focus:shadow-amber-400/20 transition-all duration-300 hover:border-slate-400"
+              placeholder="Enter your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
           </div>
 
-          {loginError && (
-            <div className="mb-4 text-sm text-red-200 bg-red-900/40 border border-red-400/60 rounded px-3 py-2">
-              {loginError}
-            </div>
-          )}
+          {/* Password */}
+          <div>
+            <label className="block text-sm mb-2 font-semibold text-slate-700">
+              Password
+            </label>
+            <input
+              type="password"
+              className="w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-2 focus:border-amber-400 focus:shadow-lg focus:shadow-amber-400/20 transition-all duration-300 hover:border-slate-400"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
 
-          <form className="space-y-4" onSubmit={handleLogin}>
-            <div>
-              <label className="block text-sm mb-2 font-medium">Username</label>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-slate-400/30 bg-slate-900/60 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-2 font-medium">Password</label>
-              <input
-                type="password"
-                className="w-full rounded-lg border border-slate-400/30 bg-slate-900/60 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full mt-4 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold py-2.5 text-sm transition disabled:opacity-60"
-              disabled={loginLoading}
-            >
-              {loginLoading ? 'Signing in...' : 'Login'}
-            </button>
-          </form>
+          {/* Login Button */}
+          <button
+            type="submit"
+            className="w-full mt-6 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold py-3.5 text-sm transition-all duration-300 disabled:opacity-60 shadow-lg hover:shadow-xl hover:shadow-amber-400/50 hover:scale-[1.02] border-2 border-amber-600"
+            disabled={loginLoading}
+          >
+            {loginLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Signing in...
+              </span>
+            ) : (
+              'Login'
+            )}
+          </button>
+        </form>
+
+        {/* Footer Note */}
+        <div className="mt-6 text-center">
+          <p className="text-xs text-slate-500">
+            Secure access to Dine College resources
+          </p>
         </div>
       </div>
-    )
-  }
+    </div>
+  )
+}
 
   // ========== CHAT SCREEN ==========
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
       {/* HEADER */}
-      <header className="sticky top-0 z-50 h-16 px-6 flex items-center justify-between glass-strong border-b border-white/20 shadow-lg backdrop-blur-xl">
+      <header className="sticky top-0 z-50 h-16 px-6 flex items-center justify-between backdrop-blur-2xl bg-white/90 border-b-2 border-amber-400/40 shadow-xl shadow-slate-200/50">
         <div className="flex items-center gap-4">
           <button
-            className="p-2 hover:bg-slate-100 rounded-lg transition"
+            className="p-2 hover:bg-amber-50 rounded-lg transition border-2 border-transparent hover:border-amber-300"
             onClick={() => setSidebarOpen(!sidebarOpen)}
             title="Toggle sidebar"
           >
@@ -685,7 +722,7 @@ function App() {
             </p>
           </div>
           <button
-            className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-medium transition"
+            className="px-4 py-2 rounded-lg border-2 border-slate-400 bg-white/90 backdrop-blur-xl text-slate-700 hover:bg-white hover:border-amber-400 hover:shadow-lg hover:shadow-amber-400/30 text-xs font-semibold transition-all duration-300 hover:scale-105"
             onClick={handleLogout}
           >
             Logout
@@ -713,7 +750,7 @@ function App() {
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
-          <button className="w-full mb-4 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold py-2.5 text-sm transition-all duration-300 shadow-lg hover:shadow-amber-400/50 hover:shadow-xl hover:scale-105 float-animation"
+          <button className="w-full mb-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold py-2.5 text-sm transition-all duration-300 shadow-lg hover:shadow-amber-400/50 hover:shadow-xl hover:scale-105 float-animation border-2 border-amber-600"
             onClick={handleNewChat}
             disabled={sessionsLoading}
           >
@@ -1066,11 +1103,11 @@ function App() {
               </div>
 
               {/* INPUT AREA - FIXED AT BOTTOM */}
-              <div className="fixed bottom-0 left-0 right-0 border-t border-white/20 glass-strong p-4 shadow-2xl z-40 backdrop-blur-2xl">
+              <div className="fixed bottom-0 left-0 right-0 border-t-2 border-amber-400/40 p-4 shadow-2xl z-40 backdrop-blur-3xl bg-white/85">
                 <div className="max-w-3xl mx-auto flex items-end gap-3">
                   {/* TEXT INPUT */}
                   <textarea
-                    className="flex-1 rounded-lg border border-white/30 glass px-4 py-3 text-sm text-slate-800 placeholder-slate-500 focus:outline-none glow-focus focus:border-transparent resize-none transition-all duration-300"
+                    className="flex-1 rounded-xl border-2 border-slate-300 bg-white/90 backdrop-blur-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-500 focus:outline-none focus:border-2 focus:border-amber-400 focus:shadow-lg focus:shadow-amber-400/30 resize-none transition-all duration-300 hover:border-amber-300 hover:bg-white"
                     rows={1}
                     placeholder={
                       currentSessionId
@@ -1090,7 +1127,7 @@ function App() {
 
                   {/* UPLOAD BUTTON */}
                   <button
-                    className="p-3 rounded-lg glass hover:glass-strong hover:shadow-md hover:scale-110 text-slate-700 transition-all duration-300 disabled:opacity-50"
+                    className="p-3 rounded-xl border-2 border-slate-300 bg-white/90 backdrop-blur-xl hover:border-amber-400 hover:bg-white hover:shadow-lg hover:shadow-amber-400/30 hover:scale-110 text-slate-700 transition-all duration-300 disabled:opacity-50"
                     onClick={() => {
                       setShowUpload(true)
                       setUploadFiles(null)
@@ -1115,10 +1152,10 @@ function App() {
                   </button>
 
                   {/* VOICE BUTTON */}
-                  <button className={`p-3 rounded-lg transition-all duration-300 disabled:opacity-50 hover:scale-110 ${
+                  <button className={`p-3 rounded-xl transition-all duration-300 disabled:opacity-50 hover:scale-110 ${
                       isListening
-                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-500/50'
-                        : 'glass hover:glass-strong text-slate-700 hover:shadow-md'
+                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-500/50 border-2 border-red-600'
+                        : 'border-2 border-slate-300 bg-white/90 backdrop-blur-xl hover:border-amber-400 hover:bg-white hover:shadow-lg hover:shadow-amber-400/30 text-slate-700'
                     }`}
                     onClick={toggleVoice}
                     disabled={!currentSessionId}
@@ -1142,7 +1179,7 @@ function App() {
                   </button>
 
                   {/* SEND BUTTON */}
-                  <button className="p-3 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold transition-all duration-300 disabled:opacity-50 hover:shadow-xl hover:shadow-amber-400/50 hover:scale-110"
+                  <button className="p-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-bold transition-all duration-300 disabled:opacity-50 hover:shadow-xl hover:shadow-amber-400/50 hover:scale-110 border-2 border-amber-600"
                     disabled={loading || !input.trim() || !currentSessionId}
                     onClick={handleSend}
                     title="Send message"
