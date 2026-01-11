@@ -243,9 +243,11 @@ class RAGPipeline:
         for idx, result in enumerate(results):
             meta = result.get('metadata', {})
             logger.info(
-                f"  [{idx+1}] {meta.get('filename', 'Unknown')} "
-                f"(hash: {meta.get('file_hash', 'N/A')[:16]}..., "
-                f"distance: {result.get('distance', 0):.3f})"
+                f"  [{idx+1}] File: {meta.get('filename', 'Unknown')} | "
+                f"Path: {meta.get('filepath', 'FULL_PATH_MISSING')} | "
+                f"Hash: {meta.get('file_hash', 'N/A')[:16]}... | "
+                f"Distance: {result.get('distance', 0):.3f} | "
+                f"Page: {meta.get('page_number', 'N/A')}"
             )
         
         # 3. Fix metadata for ALL sources

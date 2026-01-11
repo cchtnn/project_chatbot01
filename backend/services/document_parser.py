@@ -234,6 +234,8 @@ class DocumentParser:
 
         prefix = f"[{user_id or 'public'}]"
         logger.info(f"{prefix} Parsing {doc_type.value}: {file_path.name}")
+        logger.info(f"{prefix} FULL PATH: {file_path.absolute()}")
+        logger.info(f"{prefix} File size: {file_size_mb:.2f} MB | Hash: {file_hash[:16]}...")
 
         try:
             parsed = self._parse_dynamic(file_path, doc_type)

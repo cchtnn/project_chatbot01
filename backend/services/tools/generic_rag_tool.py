@@ -53,8 +53,18 @@ def answer(question: str, params: Dict[str, Any] = None) -> ToolResult:
 
     params = params or {}
     filters = params.get("filters")
+    
+    # Handle filter scenarios:
+    # - filters = {"file_hash": {"$in": [...]}} --> Query session documents only
+    # - filters = None --> Query ALL public/default documents
+    # - filters = {} --> Convert to None (query all)
     if filters is not None and len(filters) == 0:
         filters = None  # Convert empty dict to None
+    
+    if filters:
+        logger.info(f"[GenericRagTool] Querying with session filter: {filters}")
+    else:
+        logger.info(f"[GenericRagTool] No filters - querying ALL public/default documents")
 
     logger.info(f"[GenericRagTool] question='{question}' filters={filters}")
 
@@ -63,13 +73,16 @@ def answer(question: str, params: Dict[str, Any] = None) -> ToolResult:
     
     logger.info(f"[Retriever] returned {len(all_results)} raw chunks")
     
-    # LOG: Document sources BEFORE deduplication
-    logger.info(f"[GenericRagTool] Retrieved chunks from sources (before dedup):")
+    # LOG: Document sources BEFORE deduplication with FULL PATHS
+    logger.info(f"[GenericRagTool] Retrieved {len(all_results)} chunks from sources (BEFORE dedup):")
     for idx, chunk in enumerate(all_results):
         meta = chunk.metadata  # It's an attribute, not a dict key
+        filepath = meta.get('filepath', 'PATH_NOT_STORED_IN_METADATA')
         logger.info(
-            f"  [{idx+1}] {meta.get('filename', 'Unknown')} "
-            f"(hash: {meta.get('file_hash', 'N/A')[:16]}...)"
+            f"  [{idx+1}] File: {meta.get('filename', 'Unknown')} | "
+            f"Path: {filepath} | "
+            f"Hash: {meta.get('file_hash', 'N/A')[:16]}... | "
+            f"Score: {chunk.score:.3f}"
         )  
 
     # Smart deduplication

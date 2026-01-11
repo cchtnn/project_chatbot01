@@ -36,12 +36,17 @@ class ChromaDBManager:
 
         # Embedding pipeline (sentence-transformers)
         self.embedder = EmbeddingPipeline()
+        # NEW: Log ChromaDB persistence path
+        logger.info(f"[ChromaDB] Persistence directory: {self.settings.vectorstore_dir}")
+        logger.info(f"[ChromaDB] Collection name: {CHROMADB_COLLECTION_NAME}")
 
         # Hash-based deduplication
         self.indexed_hashes: set[str] = set()
         self._load_existing_hashes()
 
         logger.info(f"ChromaDB ready: {self.collection.count()} chunks")
+        logger.info(f"[ChromaDB] Ready: {self.collection.count()} chunks in collection '{CHROMADB_COLLECTION_NAME}'")
+        logger.info(f"[ChromaDB] Storage location: {self.settings.vectorstore_dir}")
 
     def add_chunks(self, chunks: List[TextChunk]) -> Dict[str, int]:
         """Add chunks with deduplication and embeddings."""
@@ -138,20 +143,19 @@ class ChromaDBManager:
                     "distance": dists[i],
                 }
             )
-
-        # LOG: Detailed retrieval results with document paths
-        logger.info(f"[ChromaDB Query] Retrieved {len(formatted)} chunks:")
+            
+        # LOG: Detailed retrieval results with FULL document paths
+        logger.info(f"[ChromaDB Query] Retrieved {len(formatted)} chunks (filters={filters}):")
         for idx, item in enumerate(formatted):
             meta = item.get('metadata', {})
+            filepath = meta.get('filepath', 'PATH_NOT_STORED')
             logger.info(
-                f"  [{idx+1}] filename={meta.get('filename', 'N/A')}, "
-                f"file_hash={meta.get('file_hash', 'N/A')[:16]}..., "
-                f"distance={item.get('distance', 0):.3f}, "
-                f"chunk_id={meta.get('chunk_id', 'N/A')}"
+                f"  [{idx+1}] File: {meta.get('filename', 'UNKNOWN')} | "
+                f"Path: {filepath} | "
+                f"Hash: {meta.get('file_hash', 'N/A')[:16]}... | "
+                f"Distance: {item.get('distance', 0):.3f} | "
+                f"ChunkID: {meta.get('chunk_id', 'N/A')}"
             )
-            # Check if this is from a session-specific path
-            if 'filename' in meta:
-                logger.info(f"      Source: {meta.get('filename')}")
 
         return formatted
 

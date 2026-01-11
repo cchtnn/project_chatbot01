@@ -99,6 +99,11 @@ class HybridRetriever:
             f"[Retriever] query='{query[:50]}...' --> "
             f"{len(vector_results)} vector + {len(bm25_results)} bm25"
         )
+        # NEW: Log ChromaDB collection info
+        logger.info(f"[ChromaDB] Collection name: {self.db.collection.name}")
+        logger.info(f"[ChromaDB] Total documents in collection: {self.db.collection.count()}")
+        if filters:
+            logger.info(f"[ChromaDB] Applied filters: {filters}")
         
         # Stage 2: Fusion
         fused_results = self._reciprocal_rank_fusion(vector_results, bm25_results)
@@ -125,6 +130,16 @@ class HybridRetriever:
     ) -> List[RetrievalResult]:
         """Vector similarity search using ChromaDB embeddings."""
         results = self.db.query(query, top_k=top_k, filters=filters)
+        
+        # NEW: Log full paths of retrieved documents
+        logger.info(f"[Vector Search] Retrieved {len(results)} chunks:")
+        for idx, r in enumerate(results[:5]):  # Log top 5
+            meta = r.get("metadata", {})
+            logger.info(
+                f"  [{idx+1}] File: {meta.get('filename', 'Unknown')} | "
+                f"Path: {meta.get('filepath', 'N/A')} | "
+                f"Distance: {r.get('distance', 0):.3f}"
+            )
         return [
             RetrievalResult(
                 r["content"], 

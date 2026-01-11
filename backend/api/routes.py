@@ -10,6 +10,9 @@ Jericho API routes - ENHANCED with Context Resolution
 from datetime import datetime
 from pathlib import Path
 from typing import List
+from fastapi.responses import StreamingResponse
+import asyncio
+import json
 
 from fastapi import (
     APIRouter,
@@ -241,17 +244,10 @@ async def query_endpoint(
             )
         
         if not session_file_hashes:
-            logger.warning(f"[query] No documents in session {session_id}")
-            return {
-                "answer": "No documents have been uploaded to this session yet. Please upload documents first.",
-                "session_id": session_id,
-                "sources": [],
-                "tools_used": [],
-                "confidence": 0.0,
-                "sessionnameupdated": False,
-            }
-        
-        logger.info(f"[query] Filtering by {len(session_file_hashes)} session documents")
+            logger.info(f"[query] No documents in session {session_id} - will query default/public data")
+            # Don't return - let orchestrator handle fallback to default data
+        else:
+            logger.info(f"[query] Filtering by {len(session_file_hashes)} session documents")
         
         if enriched_query != query:
             logger.info(f"[query] Context enriched: '{query}' --> '{enriched_query}'")
@@ -263,6 +259,9 @@ async def query_endpoint(
             session_file_hashes=session_file_hashes  # NEW
         )
         response = orchestrator.handle_query(request)
+        # NEW: Log query processing summary
+        logger.info(f"[Query Complete] Session={session_id} | Tools={response.tools_used} | "
+            f"Confidence={response.confidence:.2%} | Sources={len(response.sources)}")
         answer_text = response.answer
 
         # Persist message in DB
@@ -400,17 +399,10 @@ async def react_query(
         session_file_hashes = session_db.get_session_file_hashes(req.sessionid)
         
         if not session_file_hashes:
-            logger.warning(f"[react-query] No documents in session {req.sessionid}")
-            return {
-                "answer": "No documents have been uploaded to this session yet. Please upload documents first.",
-                "sessionid": req.sessionid,
-                "sources": [],
-                "tools_used": [],
-                "confidence": 0.0,
-                "sessionnameupdated": False,
-            }
-        
-        logger.info(f"[react-query] Filtering by {len(session_file_hashes)} session documents")
+            logger.info(f"[react-query] No documents in session {req.sessionid} - will query default/public data")
+            # Don't return - let orchestrator handle fallback to default data
+        else:
+            logger.info(f"[react-query] Filtering by {len(session_file_hashes)} session documents")
         
         if enriched_query != req.query:
             logger.info(f"[react-query] Context enriched: '{req.query}' --> '{enriched_query}'")
@@ -454,6 +446,135 @@ async def react_query(
         raise HTTPException(status_code=500, detail="Query failed")
 
 
+@router.get("/react-query-stream")
+async def react_query_stream(
+    query: str,
+    sessionid: int,
+    private: bool = False,
+    user=Depends(get_current_user),
+):
+    """
+    Streaming version of react-query with real-time status updates.
+    Returns SSE stream with progress updates.
+    """
+    # DEBUG: Log authentication
+    username = getattr(user, "username", "UNKNOWN")
+    logger.info(f"[react-query-stream] AUTH SUCCESS: user={username}, query={query[:50]}, session={sessionid}")
+    
+    async def event_generator():
+        try:
+            # STATUS 1: Starting
+            logger.info(f"[react-query-stream] STATUS: starting")
+            yield f"data: {json.dumps({'status': 'starting', 'message': 'Received your question...'})}\n\n"
+            await asyncio.sleep(0.1)
+            
+            # STATUS 2: Context resolution
+            logger.info(f"[react-query-stream] STATUS: context resolution")
+            yield f"data: {json.dumps({'status': 'context', 'message': 'Understanding your question...'})}\n\n"
+            history_records = session_db.get_history(sessionid)
+            conversation_history = [
+                {"question": q, "answer": a}
+                for (q, a) in history_records
+            ]
+            enriched_query = context_resolver.resolve(query, conversation_history)
+            logger.info(f"[react-query-stream] Enriched query: {enriched_query[:100]}")
+            
+            # STATUS 3: Document filtering
+            logger.info(f"[react-query-stream] STATUS: document filtering")
+            yield f"data: {json.dumps({'status': 'filtering', 'message': 'Accessing your documents...'})}\n\n"
+            session_file_hashes = session_db.get_session_file_hashes(sessionid)
+            logger.info(f"[react-query-stream] Found {len(session_file_hashes)} session documents")
+            
+            if not session_file_hashes:
+                logger.info(f"[react-query-stream] No documents in session {sessionid} - will use default data")
+                # Continue to orchestrator - it will handle default data fallback
+            
+            # STATUS 4: Routing query
+            logger.info(f"[react-query-stream] STATUS: routing")
+            yield f"data: {json.dumps({'status': 'routing', 'message': 'Determining best data source...'})}\n\n"
+            await asyncio.sleep(0.1)
+            
+            # STATUS 5: Retrieving information
+            logger.info(f"[react-query-stream] STATUS: retrieving")
+            yield f"data: {json.dumps({'status': 'retrieving', 'message': 'Searching relevant information...'})}\n\n"
+            
+            # Execute orchestrator
+            orch_request = OrchestratorRequest(
+                query=enriched_query,
+                conversation_history=conversation_history,
+                session_file_hashes=session_file_hashes
+            )
+            
+            # STATUS 6: Processing with tool
+            logger.info(f"[react-query-stream] STATUS: processing with orchestrator")
+            yield f"data: {json.dumps({'status': 'processing', 'message': 'Analyzing data...'})}\n\n"
+            orch_response = orchestrator.handle_query(orch_request)
+            logger.info(f"[react-query-stream] Orchestrator returned: tools={orch_response.tools_used}, conf={orch_response.confidence}")
+            
+            # STATUS 7: Generating answer
+            logger.info(f"[react-query-stream] STATUS: generating final answer")
+            yield f"data: {json.dumps({'status': 'generating', 'message': 'Crafting your answer...'})}\n\n"
+            await asyncio.sleep(0.2)
+            
+            answer_text = orch_response.answer
+            logger.info(f"[react-query-stream] Answer length: {len(answer_text)} chars")
+            
+            # Persist to DB
+            before_count = session_db.count_messages(sessionid)
+            session_db.add_message(
+                session_id=sessionid,
+                question=query,
+                answer=answer_text,
+            )
+            logger.info(f"[react-query-stream] Saved to DB (message count: {before_count} -> {before_count + 1})")
+            
+            # Auto-rename if first message
+            sessionnameupdated = False
+            if before_count == 0:
+                words = query.strip().split()
+                base = " ".join(words[:6]) if words else "New Chat"
+                nice_name = base[:40].rstrip()
+                session_db.rename_session(sessionid, nice_name)
+                sessionnameupdated = True
+                logger.info(f"[react-query-stream] Auto-renamed session to: {nice_name}")
+            
+            # STATUS 8: Done - send final result
+            logger.info(f"[react-query-stream] STATUS: done, sending final response")
+            final_data = {
+                "status": "done",
+                "answer": answer_text,
+                "sessionid": sessionid,
+                "tools_used": orch_response.tools_used,
+                "confidence": orch_response.confidence,
+                "sources": orch_response.sources,
+                "sessionnameupdated": sessionnameupdated,
+            }
+            yield f"data: {json.dumps(final_data)}\n\n"
+            logger.info(f"[react-query-stream] Stream completed successfully")
+            
+        except Exception as e:
+            logger.error(f"[react-query-stream] ERROR: {e}", exc_info=True)
+            error_data = {
+                "status": "error",
+                "message": f"An error occurred: {str(e)}",
+                "answer": "Sorry, I encountered an error processing your request.",
+                "sessionid": sessionid,
+                "tools_used": [],
+                "confidence": 0.0,
+                "sources": [],
+                "sessionnameupdated": False,
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 # ---------- LOGOUT ----------
 
 @router.post("/logout")

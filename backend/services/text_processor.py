@@ -66,7 +66,10 @@ class TextProcessor:
             if clean_block and len(clean_block) > 30:  # Enterprise quality gate
                 cleaned_content.append(clean_block)
         
-        logger.info(f"TextProcessor cleaned {original_count} --> {len(cleaned_content)} blocks ({parsed_doc.filename})")
+        logger.info(f"[TextProcessor] Document: {parsed_doc.filename}")
+        logger.info(f"[TextProcessor] Source path: {parsed_doc.metadata.get('filepath', 'N/A')}")
+        logger.info(f"[TextProcessor] Cleaned {original_count} --> {len(cleaned_content)} blocks")
+        logger.info(f"[TextProcessor] Strategy: {self.strategy.value} | Chunk size: {self.chunk_size}")
         
         # Chunk ONLY clean content
         chunks = self._chunk_content(parsed_doc, cleaned_content)

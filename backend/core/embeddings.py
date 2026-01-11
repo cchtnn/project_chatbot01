@@ -31,10 +31,14 @@ class EmbeddingPipeline:
 
         self.model = SentenceTransformer(self.config.model_name)
         self.model.to(self.config.device)
-        logger.info(
-            f"EmbeddingPipeline ready: {self.config.model_name} on {self.config.device}, "
-            f"batch_size={self.config.batch_size}"
-        )
+        # NEW: Show full model path/cache location
+        from sentence_transformers import __version__ as st_version
+        import os
+        cache_folder = os.path.join(os.path.expanduser('~'), '.cache', 'torch', 'sentence_transformers')
+        logger.info(f"[EmbeddingPipeline] Model: {self.config.model_name}")
+        logger.info(f"[EmbeddingPipeline] Device: {self.config.device} | Batch size: {self.config.batch_size}")
+        logger.info(f"[EmbeddingPipeline] sentence-transformers version: {st_version}")
+        logger.info(f"[EmbeddingPipeline] Model cache directory: {cache_folder}")
 
     def embed_texts(self, texts: List[str]) -> np.ndarray:
         """Return embeddings as numpy array [N, D]."""

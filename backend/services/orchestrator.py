@@ -332,10 +332,46 @@ class Orchestrator:
         # Route query
         tool_name, confidence, routing_source = self._route_query(request.query)
         
-        logger.info(
-            f"[Orchestrator] Routed to {tool_name} "
-            f"(confidence={confidence:.2f}, source={routing_source})"
-        )
+        # NEW: Enhanced routing diagnostics with category classification
+        category_map = {
+            "TranscriptTool": "STUDENT TRANSCRIPTION",
+            "PayrollTool": "PAYROLL DATA",
+            "BorPlannerTool": "BOR PLANNING",
+            "GenericRagTool": "INSTITUTIONAL POLICY",
+            "ConversationalHandler": "CONVERSATIONAL"
+        }
+        category = category_map.get(tool_name, "UNKNOWN")
+
+        logger.info("=" * 80)
+        logger.info(f"[ROUTING CATEGORY] {category}")
+        logger.info(f"[ROUTING DETAILS]")
+        logger.info(f"  Query: {request.query[:100]}...")
+        logger.info(f"  Selected Tool: {tool_name}")
+        logger.info(f"  Confidence: {confidence:.2%}")
+        logger.info(f"  Routing Method: {routing_source}")
+        logger.info(f"  Session Documents: {len(request.session_file_hashes)} files")
+        if request.session_file_hashes:
+            logger.info(f"  Document Hashes: {[h[:8] + '...' for h in request.session_file_hashes[:3]]}")
+        logger.info("=" * 80)
+
+        # NEW: Enhanced routing diagnostics
+        logger.info("=" * 80)
+        logger.info(f"[ROUTING SUMMARY]")
+        logger.info(f"  Query: {request.query[:100]}...")
+        logger.info(f"  Selected Tool: {tool_name}")
+        logger.info(f"  Category: {category_map.get(tool_name, 'UNKNOWN')}")
+        logger.info(f"  Confidence: {confidence:.2%}")
+        logger.info(f"  Routing Method: {routing_source}")
+        logger.info(f"  Session Documents: {len(request.session_file_hashes)}")
+        logger.info("=" * 80)
+
+        # Define category map at the top of the method
+        category_map = {
+            "TranscriptTool": "STUDENT TRANSCRIPTION",
+            "PayrollTool": "PAYROLL DATA", 
+            "BorPlannerTool": "BOR PLANNING",
+            "GenericRagTool": "INSTITUTIONAL POLICY"
+        }
         
         # NEW: Check if conversational
         if hasattr(self, '_cached_conversational_result') and self._cached_conversational_result:
@@ -371,6 +407,9 @@ class Orchestrator:
             # ChromaDB filter format: match any of these file hashes
             query_filters = {"file_hash": {"$in": request.session_file_hashes}}
             logger.info(f"[Orchestrator] Applying session filter: {len(request.session_file_hashes)} documents")
+        else:
+            # No session documents - will query default/public embeddings
+            logger.info(f"[Orchestrator] No session documents - using default data")
 
         if tool_name in TOOL_MAP:
             try:
@@ -407,8 +446,19 @@ class Orchestrator:
                     if m_payroll:
                         params["payroll_no"] = int(m_payroll.group(2))
                 
-                # Execute with session filters
-                params["filters"] = query_filters  # Pass filters to tool
+                # Execute with filters (only for GenericRagTool)
+                # Other tools (Transcript, Payroll, BOR) use their own data sources
+                if tool_name == "GenericRagTool":
+                    # Pass filters to GenericRagTool (None = query all public data)
+                    params["filters"] = query_filters
+                    if query_filters:
+                        logger.info(f"[Orchestrator] {tool_name} querying session documents")
+                    else:
+                        logger.info(f"[Orchestrator] {tool_name} querying all public/default documents")
+                else:
+                    # Transcript, Payroll, BOR tools don't use filters
+                    logger.info(f"[Orchestrator] {tool_name} using built-in data source")
+                
                 result = TOOL_MAP[tool_name](request.query, params)
                 tool_results.append(result)
                 tools_used.append(tool_name)

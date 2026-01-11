@@ -387,13 +387,65 @@ function App() {
     }
   }
 
-  const handleSend = async () => {
-    const q = input.trim()
-    if (!q || !currentSessionId) return
-    setInput('')
-    setShowTemplates(false)
+  // const handleSend = async () => {
+  //   const q = input.trim()
+  //   if (!q || !currentSessionId) return
+  //   setInput('')
+  //   setShowTemplates(false)
 
-    const userMessage: ChatMessage = {
+  //   const userMessage: ChatMessage = {
+  //     id: nextId,
+  //     role: 'user',
+  //     content: q,
+  //   }
+  //   setNextId(nextId + 1)
+  //   setMessages((prev) => [...prev, userMessage])
+  //   setLoading(true)
+
+  //   try {
+  //     const resp = await fetch('http://localhost:8000/react-query', {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({
+  //         query: q,
+  //         sessionid: currentSessionId,
+  //         private: false,
+  //       }),
+  //       credentials: 'include',
+  //     })
+  //     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  //     const data = await resp.json()
+  //     const assistantMessage: ChatMessage = {
+  //       id: nextId + 1,
+  //       role: 'assistant',
+  //       content: data.answer ?? 'No answer field in response.',
+  //       sources: data.sources || [],
+  //       confidence:
+  //         typeof data.confidence === 'number' ? data.confidence : undefined,
+  //       feedback: null,
+  //     }
+  //     setNextId(nextId + 2)
+  //     setMessages((prev) => [...prev, assistantMessage])
+  //   } catch (err) {
+  //     console.error(err)
+  //     const errorMessage: ChatMessage = {
+  //       id: nextId + 1,
+  //       role: 'assistant',
+  //       content: 'Error calling backend. Check server logs.',
+  //     }
+  //     setNextId(nextId + 2)
+  //     setMessages((prev) => [...prev, errorMessage])
+  //   } finally {
+  //     setLoading(false)
+  //   }
+  // }
+  const handleSend = async () => {
+  const q = input.trim()
+  if (!q || !currentSessionId) return
+  setInput('')
+  setShowTemplates(false)
+
+  const userMessage: ChatMessage = {
       id: nextId,
       role: 'user',
       content: q,
@@ -402,44 +454,127 @@ function App() {
     setMessages((prev) => [...prev, userMessage])
     setLoading(true)
 
+    // NEW: Add status message placeholder
+    const statusMessageId = nextId + 1
+    const statusMessage: ChatMessage = {
+      id: statusMessageId,
+      role: 'assistant',
+      content: '🔄 Received your question...',
+    }
+    setMessages((prev) => [...prev, statusMessage])
+
     try {
-      const resp = await fetch('http://localhost:8000/react-query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // FIXED: EventSource doesn't support credentials, use fetch with ReadableStream instead
+      const response = await fetch('http://localhost:8000/react-query-stream?' + 
+        new URLSearchParams({
           query: q,
-          sessionid: currentSessionId,
-          private: false,
-        }),
-        credentials: 'include',
+          sessionid: String(currentSessionId),
+          private: 'false'
+        }), {
+        method: 'GET',
+        credentials: 'include', // This is what EventSource was missing!
+        headers: {
+          'Accept': 'text/event-stream',
+        }
       })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data = await resp.json()
-      const assistantMessage: ChatMessage = {
-        id: nextId + 1,
-        role: 'assistant',
-        content: data.answer ?? 'No answer field in response.',
-        sources: data.sources || [],
-        confidence:
-          typeof data.confidence === 'number' ? data.confidence : undefined,
-        feedback: null,
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
       }
-      setNextId(nextId + 2)
-      setMessages((prev) => [...prev, assistantMessage])
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      // Read stream
+      while (true) {
+        const { done, value } = await reader.read()
+        
+        if (done) {
+          setLoading(false)
+          break
+        }
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6))
+              
+              console.log('[SSE]', data.status, data.message || data.answer?.substring(0, 50))
+              
+              if (data.status === 'done') {
+                // Replace status message with final answer
+                setMessages((prev) => 
+                  prev.map((msg) =>
+                    msg.id === statusMessageId
+                      ? {
+                          ...msg,
+                          content: data.answer,
+                          sources: data.sources || [],
+                          confidence: data.confidence,
+                          feedback: null,
+                        }
+                      : msg
+                  )
+                )
+                setNextId(nextId + 2)
+                setLoading(false)
+              } else if (data.status === 'error') {
+                // Show error
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === statusMessageId
+                      ? { ...msg, content: `❌ Error: ${data.message}` }
+                      : msg
+                  )
+                )
+                setLoading(false)
+              } else {
+                // Update status message
+                const statusEmojis: Record<string, string> = {
+                  starting: '🔄',
+                  context: '🧠',
+                  filtering: '📂',
+                  routing: '🎯',
+                  retrieving: '🔍',
+                  processing: '⚙️',
+                  generating: '✨',
+                }
+                const emoji = statusEmojis[data.status] || '🔄'
+                
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === statusMessageId
+                      ? { ...msg, content: `${emoji} ${data.message}` }
+                      : msg
+                  )
+                )
+              }
+            } catch (parseError) {
+              console.error('Failed to parse SSE data:', parseError, line)
+            }
+          }
+        }
+      }
+
     } catch (err) {
-      console.error(err)
+      console.error('[handleSend] Error:', err)
       const errorMessage: ChatMessage = {
         id: nextId + 1,
         role: 'assistant',
         content: 'Error calling backend. Check server logs.',
       }
       setNextId(nextId + 2)
-      setMessages((prev) => [...prev, errorMessage])
-    } finally {
+      setMessages((prev) => prev.filter(m => m.id !== statusMessageId).concat([errorMessage]))
       setLoading(false)
     }
   }
-
   const toggleVoice = () => {
     if (isListening && recognition) {
       recognition.stop()
@@ -1078,26 +1213,6 @@ function App() {
                       </div>
                     </div>
                   ))}
-
-                  {loading && (
-                    <div className="flex justify-start">
-                      <div className="inline-flex items-center gap-2 px-5 py-4 rounded-xl bg-white text-xs text-slate-600 shadow-md border border-slate-200">
-                        <div className="flex gap-1">
-                          <span className="h-2 w-2 rounded-full bg-amber-400 animate-bounce"></span>
-                          <span
-                            className="h-2 w-2 rounded-full bg-amber-400 animate-bounce"
-                            style={{ animationDelay: '0.2s' }}
-                          ></span>
-                          <span
-                            className="h-2 w-2 rounded-full bg-amber-400 animate-bounce"
-                            style={{ animationDelay: '0.4s' }}
-                          ></span>
-                        </div>
-                        <span>Jericho is thinking...</span>
-                      </div>
-                    </div>
-                  )}
-
                   <div ref={messagesEndRef} />
                 </div>
               </div>
